@@ -2,27 +2,25 @@
 
 import { TIMEZONE_OPTIONS } from "@/lib/timezone";
 import { useTimezone } from "@/components/layout/TimezoneContext";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function TimezoneToggle() {
   const { timezone, setTimezone } = useTimezone();
 
   return (
-    <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+    <div className="segmented">
       {TIMEZONE_OPTIONS.map((opt) => (
-        <Button
+        <button
           key={opt.value}
-          variant="ghost"
-          size="sm"
+          type="button"
           className={cn(
-            "h-7 px-2.5 text-xs",
-            timezone === opt.value && "bg-white shadow-sm",
+            "segment-btn px-2.5",
+            timezone === opt.value && "segment-btn-active",
           )}
           onClick={() => setTimezone(opt.value)}
         >
           {opt.short}
-        </Button>
+        </button>
       ))}
     </div>
   );

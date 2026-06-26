@@ -1,5 +1,13 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    const { hostname } = window.location;
+    // LAN access: API on same host, port 8000 (avoid hard-coded localhost).
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+      return `http://${hostname}:8000`;
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
+}
 
 export type Interval = "1Min" | "5Min" | "15Min" | "1H" | "1D";
 
@@ -101,7 +109,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -117,7 +125,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     return res.json() as Promise<T>;
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
-      throw new Error("请求超时，请检查后端是否在运行 (localhost:8000)");
+      throw new Error(`请求超时，请检查后端是否在运行 (${getApiBase()})`);
     }
     throw e;
   } finally {
@@ -197,6 +205,6 @@ export function subscribeStream(
 }
 
 export function streamWsUrl() {
-  const base = API_BASE.replace(/^http/, "ws");
+  const base = getApiBase().replace(/^http/, "ws");
   return `${base}/ws/stream`;
 }

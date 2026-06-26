@@ -17,10 +17,11 @@ import { DisclaimerBanner } from "@/components/layout/DisclaimerBanner";
 import { MarketStatusBar } from "@/components/layout/MarketStatusBar";
 import { TimezoneProvider } from "@/components/layout/TimezoneContext";
 import { TimezoneToggle } from "@/components/layout/TimezoneToggle";
+import { ThemeProvider } from "@/components/layout/ThemeContext";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { WatchlistPanel } from "@/components/watchlist/WatchlistPanel";
 import { CandleChart, MA_CONFIG } from "@/components/chart/CandleChart";
 import { AnalysisPanel } from "@/components/analysis/AnalysisPanel";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,6 @@ export function AppShell() {
       setBars(barsRes.bars);
       barsRef.current = barsRes.bars;
       setHasMoreHistory(barsRes.has_more);
-      // Defer stream subscribe so chart paint is never blocked.
       window.setTimeout(() => {
         void subscribeStream(sym, iv, ext)
           .then(() => setStreamWarning(null))
@@ -192,100 +192,101 @@ export function AppShell() {
   }
 
   return (
+    <ThemeProvider>
     <TimezoneProvider>
-    <div className="flex h-screen flex-col bg-white text-slate-900">
-      <DisclaimerBanner />
-      <MarketStatusBar />
-      <div className="flex min-h-0 flex-1">
-        <WatchlistPanel
-          selected={symbol}
-          onSelect={(s) => {
-            setSymbol(s);
-            setHighlightedLevel(null);
-          }}
-        />
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2">
-            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-              {INTERVALS.map((iv) => (
-                <Button
-                  key={iv.value}
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-7 px-3",
-                    interval === iv.value && "bg-white shadow-sm",
-                  )}
-                  onClick={() => setInterval(iv.value)}
-                >
-                  {iv.label}
-                </Button>
-              ))}
+      <div className="flex h-screen flex-col text-foreground">
+        <DisclaimerBanner />
+        <MarketStatusBar />
+        <div className="flex min-h-0 flex-1">
+          <WatchlistPanel
+            selected={symbol}
+            onSelect={(s) => {
+              setSymbol(s);
+              setHighlightedLevel(null);
+            }}
+          />
+          <main className="flex min-w-0 flex-1 flex-col border-x border-[color:var(--border-subtle)]">
+            <div className="toolbar-strip flex flex-wrap items-center gap-3 px-4 py-2.5">
+              <div className="segmented">
+                {INTERVALS.map((iv) => (
+                  <button
+                    key={iv.value}
+                    type="button"
+                    className={cn(
+                      "segment-btn mono-num",
+                      interval === iv.value && "segment-btn-active",
+                    )}
+                    onClick={() => setInterval(iv.value)}
+                  >
+                    {iv.label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
+                <Checkbox
+                  checked={extendedHours}
+                  onCheckedChange={(v) => setExtendedHours(v === true)}
+                />
+                <span>盘前盘后</span>
+              </label>
+              <TimezoneToggle />
+              <ThemeToggle />
+              <div className="ml-auto flex flex-wrap items-center gap-3">
+                {MA_CONFIG.map((ma) => (
+                  <label
+                    key={ma.key}
+                    className="flex cursor-pointer items-center gap-1.5 text-xs text-muted"
+                  >
+                    <Checkbox
+                      checked={enabledMas.has(ma.key)}
+                      onCheckedChange={() => toggleMa(ma.key)}
+                    />
+                    <span style={{ color: ma.color }} className="mono-num">
+                      {ma.label}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
-              <Checkbox
-                checked={extendedHours}
-                onCheckedChange={(v) => setExtendedHours(v === true)}
+            {barsError && <div className="alert-error px-4 py-2">{barsError}</div>}
+            {streamWarning && !barsError && (
+              <div className="alert-warn px-4 py-2">{streamWarning}</div>
+            )}
+            {historyError && !barsLoading && (
+              <div className="alert-warn px-4 py-1.5 text-xs">{historyError}</div>
+            )}
+            {symbol ? (
+              <CandleChart
+                symbol={symbol}
+                interval={interval}
+                bars={bars}
+                levels={analysis?.levels ?? []}
+                trendlines={analysis?.trendlines ?? []}
+                enabledMas={enabledMas}
+                loading={barsLoading}
+                highlightedLevel={highlightedLevel}
+                extendedHours={extendedHours}
+                hasMoreHistory={hasMoreHistory}
+                loadingMore={loadingMore}
+                onLoadMore={handleLoadMore}
               />
-              <span>盘前盘后</span>
-            </label>
-            <TimezoneToggle />
-            <div className="ml-auto flex flex-wrap items-center gap-3">
-              {MA_CONFIG.map((ma) => (
-                <label key={ma.key} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
-                  <Checkbox
-                    checked={enabledMas.has(ma.key)}
-                    onCheckedChange={() => toggleMa(ma.key)}
-                  />
-                  <span style={{ color: ma.color }}>{ma.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          {barsError && (
-            <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-              {barsError}
-            </div>
-          )}
-          {streamWarning && !barsError && (
-            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-              {streamWarning}
-            </div>
-          )}
-          {historyError && !barsLoading && (
-            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-              {historyError}
-            </div>
-          )}
-          {symbol ? (
-            <CandleChart
-              symbol={symbol}
-              interval={interval}
-              bars={bars}
-              levels={analysis?.levels ?? []}
-              trendlines={analysis?.trendlines ?? []}
-              enabledMas={enabledMas}
-              loading={barsLoading}
-              highlightedLevel={highlightedLevel}
-              extendedHours={extendedHours}
-              hasMoreHistory={hasMoreHistory}
-              loadingMore={loadingMore}
-              onLoadMore={handleLoadMore}
-            />
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-slate-500">
-              从左侧自选列表选择标的
-            </div>
-          )}
-        </main>
-        <AnalysisPanel
-          analysis={analysis}
-          loading={analysisLoading}
-          error={analysisError}
-          onHighlightLevel={setHighlightedLevel}
-        />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted">
+                <div className="h-12 w-12 rounded-full border border-[color:var(--border)] bg-[color:var(--accent-dim)] shadow-glow-sm" />
+                <p className="text-sm text-secondary">从左侧自选列表选择标的</p>
+                <p className="brand-mark">Select a symbol to begin</p>
+              </div>
+            )}
+          </main>
+          <AnalysisPanel
+            analysis={analysis}
+            loading={analysisLoading}
+            error={analysisError}
+            onHighlightLevel={setHighlightedLevel}
+          />
+        </div>
       </div>
-    </div>
     </TimezoneProvider>
+    </ThemeProvider>
   );
 }

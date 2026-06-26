@@ -12,19 +12,21 @@ import {
   Time,
 } from "lightweight-charts";
 import type { Bar, Interval, LevelItem, TrendlineItem } from "@/lib/api";
+import { useTheme } from "@/components/layout/ThemeContext";
+import { CHART_THEME } from "@/lib/theme";
 import { useTimezone } from "@/components/layout/TimezoneContext";
 import { chartLocalization } from "@/lib/timezone";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const MA_CONFIG: { key: string; label: string; color: string }[] = [
   { key: "sma5", label: "SMA5", color: "#94a3b8" },
-  { key: "sma10", label: "SMA10", color: "#64748b" },
-  { key: "sma20", label: "SMA20", color: "#3b82f6" },
-  { key: "sma60", label: "SMA60", color: "#8b5cf6" },
-  { key: "sma120", label: "SMA120", color: "#a855f7" },
-  { key: "sma200", label: "SMA200", color: "#6366f1" },
-  { key: "ema20", label: "EMA20", color: "#f59e0b" },
-  { key: "ema50", label: "EMA50", color: "#ef4444" },
+  { key: "sma10", label: "SMA10", color: "#cbd5e1" },
+  { key: "sma20", label: "SMA20", color: "#38bdf8" },
+  { key: "sma60", label: "SMA60", color: "#a78bfa" },
+  { key: "sma120", label: "SMA120", color: "#c084fc" },
+  { key: "sma200", label: "SMA200", color: "#818cf8" },
+  { key: "ema20", label: "EMA20", color: "#fbbf24" },
+  { key: "ema50", label: "EMA50", color: "#fb7185" },
 ];
 
 function needsMoreHistory(
@@ -98,6 +100,10 @@ export function CandleChart({
   loadingMore = false,
   onLoadMore,
 }: Props) {
+  const { theme } = useTheme();
+  const chartTheme = CHART_THEME[theme];
+  const chartThemeRef = useRef(chartTheme);
+  chartThemeRef.current = chartTheme;
   const { timezone, label: tzLabel } = useTimezone();
   const intraday = interval !== "1D";
   const containerRef = useRef<HTMLDivElement>(null);
@@ -142,7 +148,7 @@ export function CandleChart({
         nextBars.map((b) => ({
           time: b.time as Time,
           value: b.volume,
-          color: b.close >= b.open ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)",
+          color: b.close >= b.open ? chartThemeRef.current.volumeUp : chartThemeRef.current.volumeDown,
         })),
       );
 
@@ -194,32 +200,37 @@ export function CandleChart({
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const t = chartThemeRef.current;
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#ffffff" },
-        textColor: "#334155",
+        background: { type: ColorType.Solid, color: t.background },
+        textColor: t.textColor,
       },
       grid: {
-        vertLines: { color: "#f1f5f9" },
-        horzLines: { color: "#f1f5f9" },
+        vertLines: { color: t.grid },
+        horzLines: { color: t.grid },
       },
-      rightPriceScale: { borderColor: "#e2e8f0" },
+      rightPriceScale: { borderColor: t.border },
       timeScale: {
-        borderColor: "#e2e8f0",
+        borderColor: t.border,
         timeVisible: true,
         fixLeftEdge: false,
         fixRightEdge: true,
       },
-      crosshair: { mode: 1 },
+      crosshair: {
+        mode: 1,
+        vertLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel },
+        horzLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel },
+      },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
     });
     const candle = chart.addSeries(CandlestickSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
+      upColor: t.up,
+      downColor: t.down,
       borderVisible: false,
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
+      wickUpColor: t.wickUp,
+      wickDownColor: t.wickDown,
     });
     const volume = chart.addSeries(HistogramSeries, {
       color: "#cbd5e1",
@@ -291,6 +302,38 @@ export function CandleChart({
       trendlineSeriesRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candle = candleRef.current;
+    if (!chart || !candle) return;
+    const t = chartTheme;
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: t.background },
+        textColor: t.textColor,
+      },
+      grid: {
+        vertLines: { color: t.grid },
+        horzLines: { color: t.grid },
+      },
+      rightPriceScale: { borderColor: t.border },
+      timeScale: { borderColor: t.border },
+      crosshair: {
+        vertLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel },
+        horzLine: { color: t.crosshair, labelBackgroundColor: t.crosshairLabel },
+      },
+    });
+    candle.applyOptions({
+      upColor: t.up,
+      downColor: t.down,
+      wickUpColor: t.wickUp,
+      wickDownColor: t.wickDown,
+    });
+    if (barsRef.current.length > 0) {
+      pushBarsToChartRef.current(barsRef.current);
+    }
+  }, [theme, chartTheme]);
 
   useEffect(() => {
     chartRef.current?.applyOptions({
@@ -383,7 +426,7 @@ export function CandleChart({
                   : "S";
       const line = candle.createPriceLine({
         price: lv.price,
-        color: isHl ? "#0f172a" : isFar ? `${color}99` : color,
+        color: isHl ? chartTheme.highlight : isFar ? `${color}99` : color,
         lineWidth,
         lineStyle,
         axisLabelVisible: true,
@@ -391,7 +434,7 @@ export function CandleChart({
       });
       levelLinesRef.current.push(line);
     }
-  }, [levels, highlightedLevel]);
+  }, [levels, highlightedLevel, chartTheme]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -456,26 +499,31 @@ export function CandleChart({
   }, [bars, enabledMas]);
 
   return (
-    <div className="relative flex h-full min-h-[420px] flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
+    <div className="relative flex h-full min-h-[420px] flex-1 flex-col bg-chart">
+      <div className="toolbar-strip flex items-center justify-between px-4 py-2.5">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">{symbol}</h1>
-          <p className="text-xs text-slate-500">
+          <h1 className="mono-num text-xl font-bold tracking-wide text-primary text-glow">
+            {symbol}
+          </h1>
+          <p className="mono-num text-xs text-muted">
             {interval} · {tzLabel}
             {extendedHours ? " · 含盘前盘后" : " · 仅正常盘"}
             {hasMoreHistory ? " · 缩小自动加载更早" : " · 已到最早数据"}
-            {" · 线型: POC实线 TL斜线 斐波紫虚线"}
+            {" · POC实线 · TL斜线 · 斐波紫虚线"}
           </p>
         </div>
       </div>
       {loadingMore && !loading && (
-        <div className="pointer-events-none absolute left-3 top-14 z-10 rounded bg-white/90 px-2 py-1 text-xs text-slate-600 shadow">
+        <div className="pointer-events-none absolute left-3 top-16 z-10 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)]/90 px-2.5 py-1 text-xs text-accent shadow-glow-sm backdrop-blur-sm">
           加载更早 K 线…
         </div>
       )}
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
-          <Skeleton className="h-full w-full" />
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center backdrop-blur-sm"
+          style={{ background: "color-mix(in srgb, var(--chart-bg) 82%, transparent)" }}
+        >
+          <Skeleton className="h-full w-full opacity-40" />
         </div>
       )}
       <div ref={containerRef} className="min-h-0 flex-1" />

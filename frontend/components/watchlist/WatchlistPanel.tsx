@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, TrendingUp } from "lucide-react";
 import {
   addToWatchlist,
   fetchWatchlist,
@@ -89,9 +89,15 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
   const showSkeleton = initialLoading && items.length === 0;
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="border-b border-slate-200 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">自选 Watchlist</h2>
+    <aside className="panel flex h-full w-64 shrink-0 flex-col shadow-panel">
+      <div className="border-b border-[color:var(--border)] p-4">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-accent" />
+          <div>
+            <p className="brand-mark">Watchlist</p>
+            <h2 className="text-sm font-semibold text-primary">自选列表</h2>
+          </div>
+        </div>
         <form onSubmit={handleAdd} className="mt-3 flex gap-2">
           <Input
             placeholder="AAPL"
@@ -108,7 +114,7 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
             )}
           </Button>
         </form>
-        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2">
@@ -119,7 +125,7 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
             </div>
           )}
           {!showSkeleton && items.length === 0 && (
-            <p className="p-4 text-center text-sm text-slate-500">添加美股代码开始看盘</p>
+            <p className="p-4 text-center text-sm text-muted">添加美股代码开始看盘</p>
           )}
           {items.map((item) => {
             const active = selected === item.symbol;
@@ -129,8 +135,10 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
               <div
                 key={item.symbol}
                 className={cn(
-                  "mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 transition-colors",
-                  active ? "bg-slate-100 ring-1 ring-slate-300" : "hover:bg-slate-50",
+                  "group mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 transition-all duration-200",
+                  active
+                    ? "bg-[color:var(--accent-dim)] ring-1 ring-[color:var(--segment-active-ring)] shadow-glow-sm"
+                    : "hover:bg-[color:var(--hover-bg)]",
                 )}
               >
                 <button
@@ -138,16 +146,25 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
                   onClick={() => onSelect(item.symbol)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <div className="font-medium text-slate-900">{item.symbol}</div>
-                  <div className="text-xs text-slate-500">
-                    {item.price != null ? `$${item.price.toFixed(2)}` : "—"}
+                  <div className="mono-num font-semibold text-primary">{item.symbol}</div>
+                  <div className="text-xs text-muted">
+                    {item.price != null ? (
+                      <span className="mono-num text-secondary">${item.price.toFixed(2)}</span>
+                    ) : (
+                      "—"
+                    )}
                     {formatSessionLabel(item.market_state) &&
                       ` · ${formatSessionLabel(item.market_state)}`}
                   </div>
                 </button>
                 <div className="flex shrink-0 items-center gap-2">
                   {pct != null && (
-                    <span className={cn("text-sm font-medium", up ? "text-emerald-600" : "text-red-600")}>
+                    <span
+                      className={cn(
+                        "mono-num text-sm font-medium",
+                        up ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+                      )}
+                    >
                       {up ? "+" : ""}
                       {pct.toFixed(2)}%
                     </span>
@@ -155,7 +172,7 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-slate-400 hover:text-red-600"
+                    className="h-7 w-7 text-muted opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100 dark:hover:text-red-400"
                     onClick={() => handleRemove(item.symbol)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
