@@ -11,6 +11,7 @@ import {
   type Analysis,
   type Bar,
   type Interval,
+  type WatchlistItem,
 } from "@/lib/api";
 import { mergeBars } from "@/lib/bars";
 import { DisclaimerBanner } from "@/components/layout/DisclaimerBanner";
@@ -45,6 +46,7 @@ export function AppShell() {
   const [highlightedLevel, setHighlightedLevel] = useState<number | null>(null);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<WatchlistItem | null>(null);
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
   const barsRef = useRef<Bar[]>([]);
@@ -62,6 +64,29 @@ export function AppShell() {
         if (d.items.length > 0 && !symbol) setSymbol(d.items[0].symbol);
       })
       .catch(() => {});
+  }, [symbol]);
+
+  useEffect(() => {
+    if (!symbol) {
+      setSelectedQuote(null);
+      return;
+    }
+    let cancelled = false;
+    const loadQuote = () => {
+      fetchWatchlist()
+        .then((d) => {
+          if (cancelled) return;
+          const item = d.items.find((i) => i.symbol === symbol) ?? null;
+          setSelectedQuote(item);
+        })
+        .catch(() => {});
+    };
+    loadQuote();
+    const id = window.setInterval(loadQuote, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, [symbol]);
 
   const loadChart = useCallback(async (sym: string, iv: Interval, ext: boolean) => {
@@ -274,6 +299,9 @@ export function AppShell() {
                 hasMoreHistory={hasMoreHistory}
                 loadingMore={loadingMore}
                 onLoadMore={handleLoadMore}
+                price={selectedQuote?.price ?? null}
+                changePct={selectedQuote?.change_pct ?? null}
+                marketState={selectedQuote?.market_state ?? null}
               />
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted">

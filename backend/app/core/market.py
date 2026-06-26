@@ -103,3 +103,27 @@ def humanize_countdown(delta: timedelta) -> str:
         return f"{total // 60}m"
     h, m = divmod(total // 60, 60)
     return f"{h}h {m:02d}m"
+
+
+def session_label_for_ny_time(dt_ny: datetime) -> str:
+    """Map a NY timestamp to PRE | REGULAR | POST | CLOSED."""
+
+    t = dt_ny.time()
+    weekday = dt_ny.weekday() < 5
+    if weekday and PREMARKET_OPEN <= t < REGULAR_OPEN:
+        return "PRE"
+    if weekday and REGULAR_OPEN <= t < REGULAR_CLOSE:
+        return "REGULAR"
+    if weekday and REGULAR_CLOSE <= t < AFTERHOURS_CLOSE:
+        return "POST"
+    return "CLOSED"
+
+
+def clock_session_label(status: MarketStatus) -> str:
+    mapping = {
+        MarketStatus.PRE_MARKET: "PRE",
+        MarketStatus.REGULAR: "REGULAR",
+        MarketStatus.AFTER_HOURS: "POST",
+        MarketStatus.CLOSED: "CLOSED",
+    }
+    return mapping[status]

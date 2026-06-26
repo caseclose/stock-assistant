@@ -12,6 +12,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
 from app.core.config import get_settings
+from app.core.market import NY, session_label_for_ny_time
 from app.core.rth import filter_regular_hours, is_regular_hours_bar, bar_gap_minutes
 
 # Minimum bars required for our indicators to settle:
@@ -163,3 +164,59 @@ def fetch_warmup_bars(
         )
     _bar_cache[cache_key] = (now_mono, bars.copy())
     return bars
+
+
+_LATEST_BAR_CACHE: dict[str, tuple[float, tuple[float, str]]] = {}
+_LATEST_BAR_TTL = 15.0
+
+
+def fetch_latest_bar_quote(symbol: str) -> tuple[float, str] | None:
+    """Most recent 5Min bar close (~16min SIP delay) for extended-hours quotes.
+
+    Alpaca snapshots often lag during pre-market; bar close aligns better with
+    chart data and third-party pre-market prices.
+    """
+
+    import time
+
+    sym = symbol.upper()
+    now = time.monotonic()
+    cached = _LATEST_BAR_CACHE.get(sym)
+    if cached and now - cached[0] < _LATEST_BAR_TTL:
+        return cached[1]
+
+    settings = get_settings()
+    if not settings.has_credentials:
+        return None
+
+    tf = TimeFrame(5, TimeFrameUnit.Minute)
+    end = pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=16)
+    start = end - pd.Timedelta(days=3)
+    client = StockHistoricalDataClient(
+        settings.alpaca_api_key,
+        settings.alpaca_secret_key,
+        url_override=settings.alpaca_data_url_override(),
+    )
+    req = StockBarsRequest(
+        symbol_or_symbols=sym,
+        timeframe=tf,
+        start=start,
+        end=end,
+        limit=3,
+        adjustment=Adjustment.ALL,
+        sort=Sort.DESC,
+    )
+    try:
+        bars = client.get_stock_bars(req).df
+    except Exception:
+        return None
+    if bars.empty:
+        return None
+    bars = bars.reset_index(level=0, drop=True).sort_index()
+    ts = bars.index[-1]
+    close = float(bars.iloc[-1]["close"])
+    ny = pd.Timestamp(ts).tz_convert(NY).to_pydatetime()
+    sess = session_label_for_ny_time(ny)
+    result = (close, sess)
+    _LATEST_BAR_CACHE[sym] = (now, result)
+    return result

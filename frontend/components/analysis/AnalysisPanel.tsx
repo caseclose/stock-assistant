@@ -106,8 +106,11 @@ function LevelCard({
       onMouseEnter={() => onHover(lv.price)}
       onMouseLeave={() => onHover(null)}
     >
-      <div className="flex items-center justify-between gap-2">
-        <Badge variant={isRes ? "danger" : "success"}>
+      <div className="flex items-start justify-between gap-2">
+        <Badge
+          variant={isRes ? "danger" : "success"}
+          className="shrink-0 whitespace-nowrap"
+        >
           <GlossaryTip term={isRes ? "resistance" : "support"} lang={lang} hoverOnly>
             {isRes ? "压力" : "支撑"}
           </GlossaryTip>{" "}
@@ -115,7 +118,7 @@ function LevelCard({
             <span className="mono-num">${lv.price.toFixed(2)}</span>
           </GlossaryTip>
         </Badge>
-        <div className="flex flex-wrap items-center justify-end gap-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
           <GlossaryTip term={isNear ? "near" : "far"} lang={lang} hoverOnly>
             <span
               className={cn(

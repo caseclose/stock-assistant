@@ -18,6 +18,8 @@ import { useTimezone } from "@/components/layout/TimezoneContext";
 import { chartLocalization } from "@/lib/timezone";
 import { GlossaryTip } from "@/components/ui/GlossaryTip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatSessionLabel } from "@/lib/session";
+import { cn } from "@/lib/utils";
 
 const MA_CONFIG: { key: string; label: string; color: string }[] = [
   { key: "sma5", label: "SMA5", color: "#94a3b8" },
@@ -85,6 +87,9 @@ type Props = {
   hasMoreHistory?: boolean;
   loadingMore?: boolean;
   onLoadMore?: (beforeTime: number) => Promise<Bar[] | null>;
+  price?: number | null;
+  changePct?: number | null;
+  marketState?: string | null;
 };
 
 export function CandleChart({
@@ -100,6 +105,9 @@ export function CandleChart({
   hasMoreHistory = true,
   loadingMore = false,
   onLoadMore,
+  price,
+  changePct,
+  marketState,
 }: Props) {
   const { theme } = useTheme();
   const chartTheme = CHART_THEME[theme];
@@ -503,9 +511,38 @@ export function CandleChart({
     <div className="relative flex h-full min-h-[420px] flex-1 flex-col bg-chart">
       <div className="toolbar-strip flex items-center justify-between px-4 py-2.5">
         <div>
-          <h1 className="mono-num text-xl font-bold tracking-wide text-primary text-glow">
-            {symbol}
-          </h1>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="mono-num text-xl font-bold tracking-wide text-primary text-glow">
+              {symbol}
+            </h1>
+            {price != null && (
+              <div className="flex flex-wrap items-baseline gap-2">
+                <GlossaryTip term="num_quote_price">
+                  <span className="mono-num text-lg font-medium text-secondary">
+                    ${price.toFixed(2)}
+                  </span>
+                </GlossaryTip>
+                {changePct != null && (
+                  <GlossaryTip term="num_change_pct">
+                    <span
+                      className={cn(
+                        "mono-num text-sm font-medium",
+                        changePct >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400",
+                      )}
+                    >
+                      {changePct >= 0 ? "+" : ""}
+                      {changePct.toFixed(2)}%
+                    </span>
+                  </GlossaryTip>
+                )}
+                {formatSessionLabel(marketState) && (
+                  <span className="text-xs text-muted">· {formatSessionLabel(marketState)}</span>
+                )}
+              </div>
+            )}
+          </div>
           <p className="mono-num text-xs text-muted">
             <GlossaryTip term="interval">
               {interval}
