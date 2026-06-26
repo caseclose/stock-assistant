@@ -1,0 +1,36 @@
+[project]
+name = "stock-assistant-backend"
+version = "0.1.0"
+description = "FastAPI backend for US stock reference assistant"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "fastapi==0.115.5",
+  "uvicorn[standard]==0.32.1",
+  "alpaca-py==0.33.1",
+  "pandas==2.2.3",
+  "numpy==1.26.4",
+  "ta==0.11.0",
+  "pydantic==2.9.2",
+  "pydantic-settings==2.6.1",
+  "python-dotenv==1.0.1",
+  "websockets>=13",
+  "yfinance>=0.2.40,<0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.3",
+  "httpx==0.28.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

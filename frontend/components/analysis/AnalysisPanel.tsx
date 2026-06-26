@@ -1,0 +1,204 @@
+"use client";
+
+import { useState } from "react";
+import type { Analysis, LevelItem } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  analysis: Analysis | null;
+  loading?: boolean;
+  error?: string | null;
+  onHighlightLevel?: (price: number | null) => void;
+};
+
+function verdictVariant(verdict: string) {
+  if (verdict.includes("BUY")) return "success" as const;
+  if (verdict.includes("SELL")) return "danger" as const;
+  return "warning" as const;
+}
+
+function verdictLabel(verdict: string) {
+  const map: Record<string, string> = {
+    STRONG_BUY: "强烈买入",
+    BUY: "买入",
+    HOLD: "观望",
+    SELL: "卖出",
+    STRONG_SELL: "强烈卖出",
+  };
+  return map[verdict] ?? verdict;
+}
+
+function LevelCard({
+  lv,
+  onHover,
+}: {
+  lv: LevelItem;
+  onHover: (p: number | null) => void;
+}) {
+  const isRes = lv.kind === "resistance";
+  return (
+    <button
+      type="button"
+      className="w-full rounded-lg border border-slate-200 p-3 text-left transition-colors hover:border-slate-400 hover:bg-slate-50"
+      onMouseEnter={() => onHover(lv.price)}
+      onMouseLeave={() => onHover(null)}
+    >
+      <div className="flex items-center justify-between">
+        <Badge variant={isRes ? "danger" : "success"}>
+          {isRes ? "压力" : "支撑"} ${lv.price.toFixed(2)}
+        </Badge>
+        <span className="text-xs text-slate-500">强度 {lv.strength.toFixed(0)}</span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-slate-600">{lv.reason_zh}</p>
+      <p className="mt-1 text-[11px] text-slate-400">
+        {lv.touches} 次回踩 · {lv.pivots} pivots · {lv.distance_pct > 0 ? "+" : ""}
+        {lv.distance_pct.toFixed(2)}%
+      </p>
+    </button>
+  );
+}
+
+export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Props) {
+  const [lang, setLang] = useState<"zh" | "en">("zh");
+
+  if (loading) {
+    return (
+      <aside className="flex h-full w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50 p-4">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="mt-4 h-40 w-full" />
+      </aside>
+    );
+  }
+
+  if (error) {
+    return (
+      <aside className="flex h-full w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50 p-4">
+        <p className="text-sm text-red-600">{error}</p>
+      </aside>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <aside className="flex h-full w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50 p-4">
+        <p className="text-sm text-slate-500">选择标的查看分析</p>
+      </aside>
+    );
+  }
+
+  const resistances = analysis.levels.filter((l) => l.kind === "resistance");
+  const supports = analysis.levels.filter((l) => l.kind === "support");
+
+  return (
+    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-slate-200 bg-slate-50">
+      <div className="border-b border-slate-200 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">分析 Analysis</h2>
+          <div className="flex rounded-md border border-slate-200 bg-white text-xs">
+            {(["zh", "en"] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLang(l)}
+                className={cn(
+                  "px-2 py-1",
+                  lang === l ? "bg-slate-900 text-white" : "text-slate-600",
+                )}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Badge variant={verdictVariant(analysis.verdict)} className="text-sm">
+            {verdictLabel(analysis.verdict)}
+          </Badge>
+          <span className="text-2xl font-bold text-slate-900">{analysis.composite}</span>
+          <span className="text-xs text-slate-500">/ 100</span>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-slate-600">
+          {lang === "zh" ? analysis.summary_zh : analysis.summary_en}
+        </p>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="space-y-4 p-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">信号分项</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {analysis.verdict_reasons.map((r) => (
+                <div key={r.key} className="rounded-md bg-slate-100 px-2 py-1.5 text-xs">
+                  <div className="flex justify-between font-medium text-slate-700">
+                    <span className="capitalize">{r.key}</span>
+                    <span>
+                      {r.score} × {(r.weight * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-slate-600">
+                    {lang === "zh" ? r.text_zh : r.text_en}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">均线 MA</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-1 text-xs">
+              {analysis.moving_averages.map((ma) => (
+                <div
+                  key={ma.name}
+                  className={cn(
+                    "rounded px-2 py-1",
+                    ma.relation === "above" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800",
+                  )}
+                >
+                  {ma.name} {ma.value.toFixed(2)}
+                  <span className="ml-1 opacity-70">
+                    ({ma.relation === "above" ? "上" : "下"})
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Separator />
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">压力位 Resistance</h3>
+            <div className="space-y-2">
+              {resistances.length === 0 && (
+                <p className="text-xs text-slate-500">暂无显著压力位</p>
+              )}
+              {resistances.map((lv) => (
+                <LevelCard key={`r-${lv.price}`} lv={lv} onHover={onHighlightLevel ?? (() => {})} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">支撑位 Support</h3>
+            <div className="space-y-2">
+              {supports.length === 0 && (
+                <p className="text-xs text-slate-500">暂无显著支撑位</p>
+              )}
+              {supports.map((lv) => (
+                <LevelCard key={`s-${lv.price}`} lv={lv} onHover={onHighlightLevel ?? (() => {})} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+    </aside>
+  );
+}
