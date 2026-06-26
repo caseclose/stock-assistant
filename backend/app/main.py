@@ -19,9 +19,25 @@ from app.services.watchlist import WatchlistService
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     hub: StreamHub = app.state.stream_hub
-    task = asyncio.create_task(hub.poll_loop())
+    poll_task = asyncio.create_task(hub.poll_loop())
+    quote_task = asyncio.create_task(_watchlist_quote_loop(app))
     yield
-    task.cancel()
+    poll_task.cancel()
+    quote_task.cancel()
+
+
+async def _watchlist_quote_loop(app: FastAPI) -> None:
+    """Warm watchlist quote cache every 15s (Yahoo + Alpaca fallback)."""
+    market = app.state.market
+    watchlist = app.state.watchlist
+    while True:
+        try:
+            symbols = watchlist.list_symbols()
+            if symbols:
+                market.quotes_for_symbols(symbols)
+        except Exception:
+            pass
+        await asyncio.sleep(15)
 
 
 def create_app() -> FastAPI:

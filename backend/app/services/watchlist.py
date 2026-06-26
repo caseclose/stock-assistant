@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 DEFAULT_SYMBOLS = ("AAPL", "NVDA", "MSFT", "GOOG", "SPY")
+MAX_SYMBOLS = 20
 
 
 class WatchlistService:
@@ -45,10 +46,18 @@ class WatchlistService:
         if not sym:
             raise ValueError("empty symbol")
         with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM watchlist WHERE symbol = ?", (sym,)
+            ).fetchone()
+            if existing:
+                return
+            count = conn.execute("SELECT COUNT(*) AS n FROM watchlist").fetchone()["n"]
+            if count >= MAX_SYMBOLS:
+                raise ValueError(f"watchlist full (max {MAX_SYMBOLS} symbols)")
             cur = conn.execute("SELECT MAX(position) AS m FROM watchlist")
             pos = (cur.fetchone()["m"] or 0) + 1
             conn.execute(
-                "INSERT OR IGNORE INTO watchlist(symbol, position) VALUES (?, ?)",
+                "INSERT INTO watchlist(symbol, position) VALUES (?, ?)",
                 (sym, pos),
             )
 

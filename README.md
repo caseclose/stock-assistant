@@ -6,7 +6,7 @@ US equities reference dashboard: composite signal, support/resistance levels, ca
 
 ## 功能 Features
 
-- 自选列表（SQLite）+ Yahoo 报价（15s 刷新）
+- 自选列表（SQLite，最多 20 只）+ Yahoo 报价（15s 缓存，Alpaca snapshot 回退）
 - K 线多周期：1m / 5m / 15m / 1H / 1D（Alpaca）
 - 主图单路 Alpaca WebSocket 实时推送；其余自选 REST 轮询
 - 综合信号（买/卖/观望）+ 分项原因（中/英）

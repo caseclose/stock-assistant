@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.core.data import fetch_warmup_bars, fetch_yahoo_quotes
+from app.core.data import fetch_warmup_bars, fetch_watchlist_quotes
 from app.core.indicators import compute_all
 
 VALID_INTERVALS = ("1Min", "5Min", "15Min", "1H", "1D")
@@ -27,7 +27,7 @@ class MarketDataService:
         return compute_all(raw)
 
     def quotes_for_symbols(self, symbols: list[str]) -> dict:
-        quotes = fetch_yahoo_quotes(tuple(symbols))
+        quotes = fetch_watchlist_quotes(tuple(symbols))
         return {
             sym: {
                 "symbol": q.symbol,
