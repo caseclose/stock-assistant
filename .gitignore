@@ -24,3 +24,6 @@ dist/
 
 # Logs
 *.log
+
+# Screenshot tooling
+scripts/node_modules/
