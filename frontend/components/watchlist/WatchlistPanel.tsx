@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GlossaryTip } from "@/components/ui/GlossaryTip";
 import { formatSessionLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -149,7 +150,9 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
                   <div className="mono-num font-semibold text-primary">{item.symbol}</div>
                   <div className="text-xs text-muted">
                     {item.price != null ? (
-                      <span className="mono-num text-secondary">${item.price.toFixed(2)}</span>
+                      <GlossaryTip term="num_quote_price">
+                        <span className="mono-num text-secondary">${item.price.toFixed(2)}</span>
+                      </GlossaryTip>
                     ) : (
                       "—"
                     )}
@@ -159,15 +162,17 @@ export function WatchlistPanel({ selected, onSelect }: Props) {
                 </button>
                 <div className="flex shrink-0 items-center gap-2">
                   {pct != null && (
-                    <span
-                      className={cn(
-                        "mono-num text-sm font-medium",
-                        up ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-                      )}
-                    >
-                      {up ? "+" : ""}
-                      {pct.toFixed(2)}%
-                    </span>
+                    <GlossaryTip term="num_change_pct">
+                      <span
+                        className={cn(
+                          "mono-num text-sm font-medium",
+                          up ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+                        )}
+                      >
+                        {up ? "+" : ""}
+                        {pct.toFixed(2)}%
+                      </span>
+                    </GlossaryTip>
                   )}
                   <Button
                     variant="ghost"

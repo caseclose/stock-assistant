@@ -16,6 +16,7 @@ import { useTheme } from "@/components/layout/ThemeContext";
 import { CHART_THEME } from "@/lib/theme";
 import { useTimezone } from "@/components/layout/TimezoneContext";
 import { chartLocalization } from "@/lib/timezone";
+import { GlossaryTip } from "@/components/ui/GlossaryTip";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const MA_CONFIG: { key: string; label: string; color: string }[] = [
@@ -506,10 +507,33 @@ export function CandleChart({
             {symbol}
           </h1>
           <p className="mono-num text-xs text-muted">
-            {interval} · {tzLabel}
-            {extendedHours ? " · 含盘前盘后" : " · 仅正常盘"}
+            <GlossaryTip term="interval">
+              {interval}
+            </GlossaryTip>{" "}
+            · {tzLabel}
+            {extendedHours ? (
+              <>
+                {" · "}
+                <GlossaryTip term="extended_hours">
+                  含盘前盘后
+                </GlossaryTip>
+              </>
+            ) : (
+              " · 仅正常盘"
+            )}
             {hasMoreHistory ? " · 缩小自动加载更早" : " · 已到最早数据"}
-            {" · POC实线 · TL斜线 · 斐波紫虚线"}
+            {" · "}
+            <GlossaryTip term="poc">
+              POC实线
+            </GlossaryTip>
+            {" · "}
+            <GlossaryTip term="trendline">
+              TL斜线
+            </GlossaryTip>
+            {" · "}
+            <GlossaryTip term="fib">
+              斐波紫虚线
+            </GlossaryTip>
           </p>
         </div>
       </div>

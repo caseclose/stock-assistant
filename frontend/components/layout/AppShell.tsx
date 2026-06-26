@@ -23,6 +23,8 @@ import { WatchlistPanel } from "@/components/watchlist/WatchlistPanel";
 import { CandleChart, MA_CONFIG } from "@/components/chart/CandleChart";
 import { AnalysisPanel } from "@/components/analysis/AnalysisPanel";
 import { Checkbox } from "@/components/ui/checkbox";
+import { GlossaryTip } from "@/components/ui/GlossaryTip";
+import { maGlossaryId } from "@/lib/glossary";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MAS = new Set(["sma20", "ema20", "ema50"]);
@@ -209,17 +211,18 @@ export function AppShell() {
             <div className="toolbar-strip flex flex-wrap items-center gap-3 px-4 py-2.5">
               <div className="segmented">
                 {INTERVALS.map((iv) => (
-                  <button
-                    key={iv.value}
-                    type="button"
-                    className={cn(
-                      "segment-btn mono-num",
-                      interval === iv.value && "segment-btn-active",
-                    )}
-                    onClick={() => setInterval(iv.value)}
-                  >
-                    {iv.label}
-                  </button>
+                  <GlossaryTip key={iv.value} term="interval">
+                    <button
+                      type="button"
+                      className={cn(
+                        "segment-btn mono-num",
+                        interval === iv.value && "segment-btn-active",
+                      )}
+                      onClick={() => setInterval(iv.value)}
+                    >
+                      {iv.label}
+                    </button>
+                  </GlossaryTip>
                 ))}
               </div>
               <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
@@ -227,7 +230,7 @@ export function AppShell() {
                   checked={extendedHours}
                   onCheckedChange={(v) => setExtendedHours(v === true)}
                 />
-                <span>盘前盘后</span>
+                <GlossaryTip term="extended_hours">盘前盘后</GlossaryTip>
               </label>
               <TimezoneToggle />
               <ThemeToggle />
@@ -241,9 +244,11 @@ export function AppShell() {
                       checked={enabledMas.has(ma.key)}
                       onCheckedChange={() => toggleMa(ma.key)}
                     />
-                    <span style={{ color: ma.color }} className="mono-num">
-                      {ma.label}
-                    </span>
+                    <GlossaryTip term={maGlossaryId(ma.key)}>
+                      <span style={{ color: ma.color }} className="mono-num">
+                        {ma.label}
+                      </span>
+                    </GlossaryTip>
                   </label>
                 ))}
               </div>

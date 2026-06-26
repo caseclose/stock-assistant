@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GlossaryTip } from "@/components/ui/GlossaryTip";
+import { maGlossaryId, signalGlossaryId, sourceGlossaryId } from "@/lib/glossary";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -75,9 +77,11 @@ function ScoreMeter({ score }: { score: number }) {
 
 function LevelCard({
   lv,
+  lang,
   onHover,
 }: {
   lv: LevelItem;
+  lang: "zh" | "en";
   onHover: (p: number | null) => void;
 }) {
   const isRes = lv.kind === "resistance";
@@ -104,42 +108,80 @@ function LevelCard({
     >
       <div className="flex items-center justify-between gap-2">
         <Badge variant={isRes ? "danger" : "success"}>
-          {isRes ? "压力" : "支撑"}{" "}
-          <span className="mono-num">${lv.price.toFixed(2)}</span>
+          <GlossaryTip term={isRes ? "resistance" : "support"} lang={lang} hoverOnly>
+            {isRes ? "压力" : "支撑"}
+          </GlossaryTip>{" "}
+          <GlossaryTip term="num_level_price" lang={lang} hoverOnly>
+            <span className="mono-num">${lv.price.toFixed(2)}</span>
+          </GlossaryTip>
         </Badge>
         <div className="flex flex-wrap items-center justify-end gap-1">
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px]",
-              isNear
-                ? "bg-[color:var(--tag-near-bg)] text-[color:var(--tag-near-text)]"
-                : "bg-[color:var(--tag-bg)] text-[color:var(--tag-text)]",
-            )}
-          >
-            {isNear ? "近端" : "远端"}
-          </span>
-          <span
-            className="rounded px-1.5 py-0.5 text-[10px]"
-            style={{ background: "var(--tag-bg)", color: "var(--tag-text)" }}
-          >
-            {sourceLabel(lv.source)}
-          </span>
-          {lv.flipped && (
-            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
-              翻转
+          <GlossaryTip term={isNear ? "near" : "far"} lang={lang} hoverOnly>
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px]",
+                isNear
+                  ? "bg-[color:var(--tag-near-bg)] text-[color:var(--tag-near-text)]"
+                  : "bg-[color:var(--tag-bg)] text-[color:var(--tag-text)]",
+              )}
+            >
+              {isNear ? "近端" : "远端"}
             </span>
+          </GlossaryTip>
+          <GlossaryTip term={sourceGlossaryId(lv.source)} lang={lang} hoverOnly>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{ background: "var(--tag-bg)", color: "var(--tag-text)" }}
+            >
+              {sourceLabel(lv.source)}
+            </span>
+          </GlossaryTip>
+          {lv.flipped && (
+            <GlossaryTip term="flipped" lang={lang} hoverOnly>
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                翻转
+              </span>
+            </GlossaryTip>
           )}
-          <span className="mono-num text-xs text-muted">强度 {lv.strength.toFixed(0)}</span>
+          <GlossaryTip term="strength" lang={lang} hoverOnly>
+            <span className="mono-num text-xs text-muted">强度 {lv.strength.toFixed(0)}</span>
+          </GlossaryTip>
         </div>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-secondary">{lv.reason_zh}</p>
       <p className="mono-num mt-1 text-[11px] text-muted">
-        {lv.touches} 次回踩 · {lv.pivots} pivots · 量能 {lv.volume_score.toFixed(0)}
-        {lv.bounce_rate != null ? ` · 守住 ${lv.bounce_rate.toFixed(0)}%` : ""}
-        {lv.hit_rate != null ? ` · 回测 ${lv.hit_rate.toFixed(0)}%` : ""}
+        <GlossaryTip term="num_touches" lang={lang} hoverOnly>
+          {lv.touches} 次回踩
+        </GlossaryTip>{" "}
+        ·{" "}
+        <GlossaryTip term="num_pivot_count" lang={lang} hoverOnly>
+          {lv.pivots} pivots
+        </GlossaryTip>{" "}
+        ·{" "}
+        <GlossaryTip term="num_volume_score" lang={lang} hoverOnly>
+          量能 {lv.volume_score.toFixed(0)}
+        </GlossaryTip>
+        {lv.bounce_rate != null && (
+          <>
+            {" · "}
+            <GlossaryTip term="bounce_rate" lang={lang} hoverOnly>
+              守住 {lv.bounce_rate.toFixed(0)}%
+            </GlossaryTip>
+          </>
+        )}
+        {lv.hit_rate != null && (
+          <>
+            {" · "}
+            <GlossaryTip term="hit_rate" lang={lang} hoverOnly>
+              回测 {lv.hit_rate.toFixed(0)}%
+            </GlossaryTip>
+          </>
+        )}
         {lv.ma_aligned.length > 0 ? ` · ${lv.ma_aligned.join("/")}` : ""} ·{" "}
-        {lv.distance_pct > 0 ? "+" : ""}
-        {lv.distance_pct.toFixed(2)}%
+        <GlossaryTip term="num_distance_pct" lang={lang} hoverOnly>
+          {lv.distance_pct > 0 ? "+" : ""}
+          {lv.distance_pct.toFixed(2)}%
+        </GlossaryTip>
       </p>
     </button>
   );
@@ -147,11 +189,15 @@ function LevelCard({
 
 function LevelSection({
   title,
+  titleTerm,
   levels,
+  lang,
   onHighlightLevel,
 }: {
   title: string;
+  titleTerm: "resistance" | "support";
   levels: LevelItem[];
+  lang: "zh" | "en";
   onHighlightLevel?: (price: number | null) => void;
 }) {
   const near = levels.filter((l) => l.proximity === "near");
@@ -159,7 +205,11 @@ function LevelSection({
 
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold text-primary">{title}</h3>
+      <h3 className="mb-2 text-sm font-semibold text-primary">
+        <GlossaryTip term={titleTerm} lang={lang}>
+          {title}
+        </GlossaryTip>
+      </h3>
       {levels.length === 0 ? (
         <p className="text-xs text-muted">暂无显著{title.includes("压力") ? "压力位" : "支撑位"}</p>
       ) : (
@@ -167,13 +217,16 @@ function LevelSection({
           {near.length > 0 && (
             <div>
               <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-accent">
-                近端 · 距现价 ≤15%
+                <GlossaryTip term="near" lang={lang}>
+                  近端 · 距现价 ≤15%
+                </GlossaryTip>
               </p>
               <div className="space-y-2">
                 {near.map((lv) => (
                   <LevelCard
                     key={`near-${lv.kind}-${lv.price}`}
                     lv={lv}
+                    lang={lang}
                     onHover={onHighlightLevel ?? (() => {})}
                   />
                 ))}
@@ -183,13 +236,16 @@ function LevelSection({
           {far.length > 0 && (
             <div>
               <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
-                远端 · 历史结构
+                <GlossaryTip term="far" lang={lang}>
+                  远端 · 历史结构
+                </GlossaryTip>
               </p>
               <div className="space-y-2">
                 {far.map((lv) => (
                   <LevelCard
                     key={`far-${lv.kind}-${lv.price}`}
                     lv={lv}
+                    lang={lang}
                     onHover={onHighlightLevel ?? (() => {})}
                   />
                 ))}
@@ -247,10 +303,15 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
   return (
     <PanelShell>
       <div className="border-b border-[color:var(--border)] p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-accent" />
-            <h2 className="text-sm font-semibold text-primary">分析 Analysis</h2>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-accent" />
+              <h2 className="text-sm font-semibold text-primary">分析 Analysis</h2>
+            </div>
+            <p className="mt-0.5 text-[10px] text-muted">
+              {lang === "zh" ? "悬停术语或数字约 0.6 秒查看释义" : "Hover terms or numbers ~0.6s for help"}
+            </p>
           </div>
           <div className="segmented text-xs">
             {(["zh", "en"] as const).map((l) => (
@@ -266,13 +327,21 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
           </div>
         </div>
         <div className="mt-3 flex items-end gap-2">
-          <Badge variant={verdictVariant(analysis.verdict)} className="text-sm">
-            {verdictLabel(analysis.verdict)}
-          </Badge>
-          <span className="mono-num text-3xl font-bold text-glow text-primary">
-            {analysis.composite}
+          <GlossaryTip term="verdict" lang={lang}>
+            <Badge variant={verdictVariant(analysis.verdict)} className="text-sm">
+              {verdictLabel(analysis.verdict)}
+            </Badge>
+          </GlossaryTip>
+          <GlossaryTip term="composite" lang={lang}>
+            <span className="mono-num text-3xl font-bold text-glow text-primary">
+              {analysis.composite}
+            </span>
+          </GlossaryTip>
+          <span className="mb-1 text-xs text-muted">
+            <GlossaryTip term="num_score_scale" lang={lang}>
+              / 100
+            </GlossaryTip>
           </span>
-          <span className="mb-1 text-xs text-muted">/ 100</span>
         </div>
         <ScoreMeter score={analysis.composite} />
         <p className="mt-3 text-xs leading-relaxed text-secondary">
@@ -284,7 +353,11 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
         <div className="space-y-4 p-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">信号分项</CardTitle>
+              <CardTitle className="text-sm">
+                <GlossaryTip term="signal_breakdown" lang={lang}>
+                  信号分项
+                </GlossaryTip>
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {analysis.verdict_reasons.map((r) => (
@@ -293,9 +366,17 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
                   className="rounded-md border border-[color:var(--border-subtle)] bg-[color:var(--surface)]/50 px-2 py-1.5 text-xs"
                 >
                   <div className="flex justify-between font-medium text-secondary">
-                    <span className="capitalize">{r.key}</span>
+                    <GlossaryTip term={signalGlossaryId(r.key)} lang={lang}>
+                      <span className="capitalize">{r.key}</span>
+                    </GlossaryTip>
                     <span className="mono-num">
-                      {r.score} × {(r.weight * 100).toFixed(0)}%
+                      <GlossaryTip term="num_sub_score" lang={lang}>
+                        {r.score}
+                      </GlossaryTip>
+                      {" × "}
+                      <GlossaryTip term="num_weight" lang={lang}>
+                        {(r.weight * 100).toFixed(0)}%
+                      </GlossaryTip>
                     </span>
                   </div>
                   <p className="mt-0.5 text-muted">
@@ -308,7 +389,11 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">均线 MA</CardTitle>
+              <CardTitle className="text-sm">
+                <GlossaryTip term="ma" lang={lang}>
+                  均线 MA
+                </GlossaryTip>
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-1 text-xs">
               {analysis.moving_averages.map((ma) => (
@@ -321,9 +406,24 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
                       : "border-red-500/25 bg-red-500/10 text-red-700 dark:text-red-300",
                   )}
                 >
-                  {ma.name} {ma.value.toFixed(2)}
+                  <GlossaryTip term={maGlossaryId(ma.name)} lang={lang}>
+                    {ma.name}
+                  </GlossaryTip>{" "}
+                  <GlossaryTip term="num_ma_price" lang={lang}>
+                    {ma.value.toFixed(2)}
+                  </GlossaryTip>
                   <span className="ml-1 opacity-70">
-                    ({ma.relation === "above" ? "上" : "下"})
+                    (
+                    <GlossaryTip term={ma.relation === "above" ? "ma_above" : "ma_below"} lang={lang}>
+                      {ma.relation === "above" ? "上" : "下"}
+                    </GlossaryTip>
+                    )
+                  </span>
+                  <span className="ml-1 opacity-60">
+                    <GlossaryTip term="num_ma_distance_pct" lang={lang}>
+                      {ma.distance_pct > 0 ? "+" : ""}
+                      {ma.distance_pct.toFixed(1)}%
+                    </GlossaryTip>
                   </span>
                 </div>
               ))}
@@ -334,15 +434,28 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
 
           {analysis.trendlines.length > 0 && (
             <div>
-              <h3 className="mb-2 text-sm font-semibold text-primary">趋势线 Trendlines</h3>
+              <h3 className="mb-2 text-sm font-semibold text-primary">
+                <GlossaryTip term="trendline" lang={lang}>
+                  趋势线 Trendlines
+                </GlossaryTip>
+              </h3>
               <div className="space-y-1 text-xs text-secondary">
                 {analysis.trendlines.map((tl, i) => (
                   <div
                     key={`tl-${i}`}
                     className="mono-num rounded border border-[color:var(--border)] bg-[color:var(--surface)]/50 px-2 py-1.5"
                   >
-                    {tl.kind === "resistance" ? "压力" : "支撑"}斜线 · 强度 {tl.strength.toFixed(0)} ·
-                    终点 ${tl.p_end.toFixed(2)}
+                    <GlossaryTip term={tl.kind === "resistance" ? "resistance" : "support"} lang={lang}>
+                      {tl.kind === "resistance" ? "压力" : "支撑"}
+                    </GlossaryTip>
+                    斜线 ·{" "}
+                    <GlossaryTip term="strength" lang={lang}>
+                      强度 {tl.strength.toFixed(0)}
+                    </GlossaryTip>{" "}
+                    ·{" "}
+                    <GlossaryTip term="num_trendline_end_price" lang={lang}>
+                      终点 ${tl.p_end.toFixed(2)}
+                    </GlossaryTip>
                   </div>
                 ))}
               </div>
@@ -351,13 +464,17 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
 
           <LevelSection
             title="压力位 Resistance"
+            titleTerm="resistance"
             levels={resistances}
+            lang={lang}
             onHighlightLevel={onHighlightLevel}
           />
 
           <LevelSection
             title="支撑位 Support"
+            titleTerm="support"
             levels={supports}
+            lang={lang}
             onHighlightLevel={onHighlightLevel}
           />
         </div>
