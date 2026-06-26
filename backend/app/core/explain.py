@@ -27,8 +27,42 @@ class LevelExplanation:
     touches: int
     pivots: int
     distance_pct: float
+    source: str
+    flipped: bool
+    bounce_rate: float | None
+    volume_score: float
+    hit_rate: float | None
+    ma_aligned: list[str]
     reason_zh: str
     reason_en: str
+
+
+_SOURCE_ZH = {
+    "swing": "摆动结构",
+    "volume_poc": "成交量 POC",
+    "volume_vah": "价值区上沿 VAH",
+    "volume_val": "价值区下沿 VAL",
+    "psychological": "心理整数关口",
+    "trendline": "趋势线延伸",
+    "fib_236": "斐波那契 23.6%",
+    "fib_382": "斐波那契 38.2%",
+    "fib_500": "斐波那契 50%",
+    "fib_618": "斐波那契 61.8%",
+    "fib_786": "斐波那契 78.6%",
+}
+_SOURCE_EN = {
+    "swing": "swing structure",
+    "volume_poc": "volume POC",
+    "volume_vah": "value-area high",
+    "volume_val": "value-area low",
+    "psychological": "psychological round number",
+    "trendline": "projected trendline",
+    "fib_236": "Fibonacci 23.6%",
+    "fib_382": "Fibonacci 38.2%",
+    "fib_500": "Fibonacci 50%",
+    "fib_618": "Fibonacci 61.8%",
+    "fib_786": "Fibonacci 78.6%",
+}
 
 
 _VERDICT_ZH = {
@@ -72,9 +106,15 @@ def _component_reason(key: str, score: float, row: pd.Series) -> tuple[str, str]
     elif key == "volume":
         zh = f"成交量/OBV 子分 {score:.0f}"
         en = f"Volume/OBV sub-score {score:.0f}"
-    else:
+    elif key == "position":
+        zh = f"价位结构（距强支撑/压力）子分 {score:.0f}（>50 靠近支撑）"
+        en = f"Position vs S/R sub-score {score:.0f} (>50 nearer support)"
+    elif key == "vol_regime":
         zh = f"波动率体制子分 {score:.0f}"
         en = f"Volatility regime sub-score {score:.0f}"
+    else:
+        zh = f"{key} 子分 {score:.0f}"
+        en = f"{key} sub-score {score:.0f}"
     return zh, en
 
 
@@ -104,16 +144,30 @@ def explain_verdict(score: ScoreBreakdown, enriched: pd.DataFrame) -> tuple[str,
 def explain_level(lv: Level, *, daily_sourced: bool) -> LevelExplanation:
     kind_zh = "压力位" if lv.kind is LevelKind.RESISTANCE else "支撑位"
     kind_en = "resistance" if lv.kind is LevelKind.RESISTANCE else "support"
-    src = "日线结构" if daily_sourced else "当前周期"
+    timeframe = "日线" if daily_sourced else "当前周期"
+    src_zh = _SOURCE_ZH.get(lv.source, lv.source)
+    src_en = _SOURCE_EN.get(lv.source, lv.source)
+    flip_zh = "（原支撑跌破转压力）" if lv.flipped and lv.kind is LevelKind.RESISTANCE else (
+        "（原压力突破转支撑）" if lv.flipped else ""
+    )
+    flip_en = " (flipped from support)" if lv.flipped and lv.kind is LevelKind.RESISTANCE else (
+        " (flipped from resistance)" if lv.flipped else ""
+    )
     touch_date = lv.last_touch.strftime("%Y-%m-%d") if hasattr(lv.last_touch, "strftime") else str(lv.last_touch)
+    bounce_zh = f"，历史守住概率 {lv.bounce_rate:.0f}%" if lv.bounce_rate is not None else ""
+    bounce_en = f", historical hold rate {lv.bounce_rate:.0f}%" if lv.bounce_rate is not None else ""
+    hit_zh = f"，回测命中率 {lv.hit_rate:.0f}%" if lv.hit_rate is not None else ""
+    hit_en = f", backtest hold rate {lv.hit_rate:.0f}%" if lv.hit_rate is not None else ""
+    ma_zh = f"，均线汇合 {', '.join(lv.ma_aligned)}" if lv.ma_aligned else ""
+    ma_en = f", MA confluence {', '.join(lv.ma_aligned)}" if lv.ma_aligned else ""
     reason_zh = (
-        f"{src}识别：{kind_zh} ${lv.price:.2f}，强度 {lv.strength:.0f}；"
-        f"价格回踩该区间 {lv.touches} 次（{lv.pivots} 个 swing 拐点），"
+        f"{timeframe}{src_zh}：{kind_zh} ${lv.price:.2f}{flip_zh}，强度 {lv.strength:.0f}；"
+        f"回踩 {lv.touches} 次（{lv.pivots} pivot），量能分 {lv.volume_score:.0f}{bounce_zh}{hit_zh}{ma_zh}；"
         f"距现价 {lv.distance_pct:+.2f}%，最近触及 {touch_date}"
     )
     reason_en = (
-        f"{src}: {kind_en} at ${lv.price:.2f}, strength {lv.strength:.0f}; "
-        f"{lv.touches} range retests ({lv.pivots} pivots), "
+        f"{src_en} on {timeframe}: {kind_en} ${lv.price:.2f}{flip_en}, strength {lv.strength:.0f}; "
+        f"{lv.touches} retests ({lv.pivots} pivots), vol-score {lv.volume_score:.0f}{bounce_en}{hit_en}{ma_en}; "
         f"{lv.distance_pct:+.2f}% from price, last touch {touch_date}"
     )
     return LevelExplanation(
@@ -123,6 +177,12 @@ def explain_level(lv: Level, *, daily_sourced: bool) -> LevelExplanation:
         touches=lv.touches,
         pivots=lv.pivots,
         distance_pct=lv.distance_pct,
+        source=lv.source,
+        flipped=lv.flipped,
+        bounce_rate=lv.bounce_rate,
+        volume_score=lv.volume_score,
+        hit_rate=lv.hit_rate,
+        ma_aligned=list(lv.ma_aligned),
         reason_zh=reason_zh,
         reason_en=reason_en,
     )

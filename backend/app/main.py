@@ -5,15 +5,19 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import stream, symbols, watchlist
+from app.api import market as market_api, stream, symbols, watchlist
 from app.core.config import get_settings
 from app.services.analytics import AnalyticsService
 from app.services.market_data import MarketDataService
 from app.services.stream_hub import StreamHub
 from app.services.watchlist import WatchlistService
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -36,7 +40,7 @@ async def _watchlist_quote_loop(app: FastAPI) -> None:
             if symbols:
                 market.quotes_for_symbols(symbols)
         except Exception:
-            pass
+            log.debug("watchlist quote warm failed", exc_info=True)
         await asyncio.sleep(15)
 
 
@@ -56,6 +60,7 @@ def create_app() -> FastAPI:
     app.state.market = market
     app.state.analytics = AnalyticsService(market)
     app.state.stream_hub = StreamHub()
+    app.include_router(market_api.router)
     app.include_router(watchlist.router)
     app.include_router(symbols.router)
     app.include_router(stream.router)

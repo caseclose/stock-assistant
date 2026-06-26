@@ -14,6 +14,8 @@ log = logging.getLogger(__name__)
 
 _CACHE: dict[tuple[str, ...], tuple[float, dict[str, "YahooQuote"]]] = {}
 _CACHE_TTL = 15.0
+_YAHOO_COOLDOWN_UNTIL = 0.0
+_YAHOO_COOLDOWN_SEC = 300.0
 
 
 @dataclass
@@ -43,9 +45,15 @@ def _select_session_price(info: dict) -> Optional[float]:
 
 
 def _quote_one(symbol: str) -> Optional[YahooQuote]:
+    global _YAHOO_COOLDOWN_UNTIL
+    if time.time() < _YAHOO_COOLDOWN_UNTIL:
+        return None
     try:
         info = yf.Ticker(symbol).info
-    except Exception:
+    except Exception as exc:
+        if "Too Many Requests" in str(exc) or "Rate limit" in str(exc):
+            _YAHOO_COOLDOWN_UNTIL = time.time() + _YAHOO_COOLDOWN_SEC
+            log.warning("yahoo rate limited; cooling down %ss", _YAHOO_COOLDOWN_SEC)
         return None
     price = _select_session_price(info)
     rth_price = info.get("regularMarketPrice")
@@ -78,9 +86,19 @@ def fetch_yahoo_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
     if cached and now - cached[0] < _CACHE_TTL:
         return cached[1]
     out: dict[str, YahooQuote] = {}
-    with cf.ThreadPoolExecutor(max_workers=min(8, len(symbols))) as ex:
-        for sym, q in zip(symbols, ex.map(_quote_one, symbols)):
-            if q is not None:
-                out[sym] = q
+    if time.time() >= _YAHOO_COOLDOWN_UNTIL:
+        try:
+            with cf.ThreadPoolExecutor(max_workers=min(8, len(symbols))) as ex:
+                futs = {ex.submit(_quote_one, sym): sym for sym in symbols}
+                for fut in cf.as_completed(futs, timeout=8):
+                    sym = futs[fut]
+                    try:
+                        q = fut.result()
+                        if q is not None:
+                            out[sym] = q
+                    except Exception:
+                        pass
+        except cf.TimeoutError:
+            log.warning("yahoo quote batch timed out")
     _CACHE[key] = (now, out)
     return out

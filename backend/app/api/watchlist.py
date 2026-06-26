@@ -35,10 +35,10 @@ def get_watchlist(request: Request):
 @router.post("")
 def add_symbol(body: AddSymbolBody, request: Request):
     try:
-        _svc(request).add(body.symbol)
+        created = _svc(request).add(body.symbol)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    return {"ok": True}
+    return {"ok": True, "created": created, "symbol": body.symbol.strip().upper()}
 
 
 @router.delete("/{symbol}")

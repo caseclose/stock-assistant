@@ -111,6 +111,29 @@ def volume_score(df: pd.DataFrame) -> float:
     return _clip(0.6 * s_obv + 0.4 * s_vwap)
 
 
+def position_score(df: pd.DataFrame, levels: list) -> float:
+    """Proximity to strong S/R: near resistance → lower, near support → higher."""
+
+    if not levels:
+        return 50.0
+    close = float(df["close"].iloc[-1])
+    if close <= 0:
+        return 50.0
+
+    score = 50.0
+    for lv in levels:
+        dist_pct = abs(getattr(lv, "distance_pct", (lv.price / close - 1) * 100))
+        proximity = max(0.0, 1.0 - dist_pct / 2.5)
+        strength = getattr(lv, "strength", 50.0) / 100.0
+        kind = getattr(lv, "kind", None)
+        kind_val = kind.value if hasattr(kind, "value") else str(kind)
+        if kind_val == "resistance":
+            score -= proximity * strength * 28.0
+        else:
+            score += proximity * strength * 28.0
+    return _clip(score)
+
+
 def vol_regime_score(df: pd.DataFrame) -> float:
     """Low realized vol = mildly bullish (smoother trend can run);
     high vol = mildly bearish (chop / risk-off).

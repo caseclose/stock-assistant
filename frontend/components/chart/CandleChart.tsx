@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   CandlestickSeries,
   ColorType,
@@ -11,7 +11,9 @@ import {
   LineSeries,
   Time,
 } from "lightweight-charts";
-import type { Bar, Interval, LevelItem } from "@/lib/api";
+import type { Bar, Interval, LevelItem, TrendlineItem } from "@/lib/api";
+import { useTimezone } from "@/components/layout/TimezoneContext";
+import { chartLocalization } from "@/lib/timezone";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const MA_CONFIG: { key: string; label: string; color: string }[] = [
@@ -25,14 +27,61 @@ const MA_CONFIG: { key: string; label: string; color: string }[] = [
   { key: "ema50", label: "EMA50", color: "#ef4444" },
 ];
 
+function needsMoreHistory(
+  range: { from: number; to: number } | null,
+  barCount: number,
+  hasMore: boolean,
+): boolean {
+  if (!range || barCount === 0 || !hasMore) return false;
+  if (range.from < 0) return true;
+  if (range.to > barCount - 1 + 0.5) return true;
+  if (range.to - range.from > barCount * 1.02) return true;
+  if (range.from < barCount * 0.15) return true;
+  return false;
+}
+
+function clampVisibleRange(
+  chart: IChartApi,
+  barCount: number,
+  adjustingRef: { current: boolean },
+) {
+  const range = chart.timeScale().getVisibleLogicalRange();
+  if (!range || barCount === 0) return;
+  let from = Number(range.from);
+  let to = Number(range.to);
+  const span = to - from;
+  if (to > barCount - 1) {
+    const shift = to - (barCount - 1);
+    from -= shift;
+    to = barCount - 1;
+  }
+  if (from < 0) {
+    from = 0;
+    to = Math.min(barCount - 1, from + span);
+  }
+  if (from === Number(range.from) && to === Number(range.to)) return;
+
+  adjustingRef.current = true;
+  try {
+    chart.timeScale().setVisibleLogicalRange({ from, to });
+  } finally {
+    adjustingRef.current = false;
+  }
+}
+
 type Props = {
   symbol: string;
   interval: Interval;
   bars: Bar[];
   levels: LevelItem[];
+  trendlines?: TrendlineItem[];
   enabledMas: Set<string>;
   loading?: boolean;
   highlightedLevel?: number | null;
+  extendedHours?: boolean;
+  hasMoreHistory?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: (beforeTime: number) => Promise<Bar[] | null>;
 };
 
 export function CandleChart({
@@ -40,16 +89,108 @@ export function CandleChart({
   interval,
   bars,
   levels,
+  trendlines = [],
   enabledMas,
   loading,
   highlightedLevel,
+  extendedHours = true,
+  hasMoreHistory = true,
+  loadingMore = false,
+  onLoadMore,
 }: Props) {
+  const { timezone, label: tzLabel } = useTimezone();
+  const intraday = interval !== "1D";
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const maRefs = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const levelLinesRef = useRef<ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]>[]>([]);
+  const trendlineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
+  const barsRef = useRef<Bar[]>(bars);
+  const shouldFitRef = useRef(true);
+  const prevBarMetaRef = useRef({ len: 0, firstTime: null as number | null });
+  const onLoadMoreRef = useRef(onLoadMore);
+  const hasMoreRef = useRef(hasMoreHistory);
+  const fillingRef = useRef(false);
+  const rangeAdjustingRef = useRef(false);
+  const fillHistoryRef = useRef<() => void>(() => {});
+  const pushBarsToChartRef = useRef<
+    (nextBars: Bar[], opts?: { fit?: boolean; shiftPrepended?: number }) => void
+  >(() => {});
+
+  const pushBarsToChart = useCallback(
+    (
+      nextBars: Bar[],
+      opts: { fit?: boolean; shiftPrepended?: number } = {},
+    ) => {
+      const chart = chartRef.current;
+      const candle = candleRef.current;
+      const volume = volumeRef.current;
+      if (!chart || !candle || !volume || nextBars.length === 0) return;
+
+      candle.setData(
+        nextBars.map((b) => ({
+          time: b.time as Time,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+        })),
+      );
+      volume.setData(
+        nextBars.map((b) => ({
+          time: b.time as Time,
+          value: b.volume,
+          color: b.close >= b.open ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)",
+        })),
+      );
+
+      rangeAdjustingRef.current = true;
+      try {
+        if (opts.fit) {
+          chart.timeScale().fitContent();
+        } else if (opts.shiftPrepended && opts.shiftPrepended > 0) {
+          const logicalRange = chart.timeScale().getVisibleLogicalRange();
+          if (logicalRange) {
+            chart.timeScale().setVisibleLogicalRange({
+              from: logicalRange.from + opts.shiftPrepended,
+              to: logicalRange.to + opts.shiftPrepended,
+            });
+          }
+        }
+        clampVisibleRange(chart, nextBars.length, rangeAdjustingRef);
+      } finally {
+        rangeAdjustingRef.current = false;
+      }
+
+      prevBarMetaRef.current = { len: nextBars.length, firstTime: nextBars[0]?.time ?? null };
+      barsRef.current = nextBars;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    pushBarsToChartRef.current = pushBarsToChart;
+  }, [pushBarsToChart]);
+
+  useEffect(() => {
+    barsRef.current = bars;
+  }, [bars]);
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
+  useEffect(() => {
+    hasMoreRef.current = hasMoreHistory;
+    if (hasMoreHistory) {
+      requestAnimationFrame(() => fillHistoryRef.current());
+    }
+  }, [hasMoreHistory]);
+  useEffect(() => {
+    shouldFitRef.current = true;
+    prevBarMetaRef.current = { len: 0, firstTime: null };
+    fillingRef.current = false;
+  }, [symbol, interval, extendedHours]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -63,7 +204,12 @@ export function CandleChart({
         horzLines: { color: "#f1f5f9" },
       },
       rightPriceScale: { borderColor: "#e2e8f0" },
-      timeScale: { borderColor: "#e2e8f0", timeVisible: true },
+      timeScale: {
+        borderColor: "#e2e8f0",
+        timeVisible: true,
+        fixLeftEdge: false,
+        fixRightEdge: true,
+      },
       crosshair: { mode: 1 },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
@@ -87,6 +233,43 @@ export function CandleChart({
     candleRef.current = candle;
     volumeRef.current = volume;
 
+    const fillHistory = async () => {
+      if (fillingRef.current) return;
+      const load = onLoadMoreRef.current;
+      const c = chartRef.current;
+      if (!load || !c || !hasMoreRef.current) return;
+
+      fillingRef.current = true;
+      try {
+        for (let guard = 0; guard < 12; guard += 1) {
+          if (!hasMoreRef.current) break;
+          const count = barsRef.current.length;
+          const range = c.timeScale().getVisibleLogicalRange();
+          if (!needsMoreHistory(range, count, hasMoreRef.current)) break;
+          const oldest = barsRef.current[0]?.time;
+          if (!oldest) break;
+          const prevCount = count;
+          const merged = await load(oldest);
+          if (!merged || merged.length <= prevCount) break;
+          const added = merged.length - prevCount;
+          const prepended = added > 0 && merged[0]?.time !== oldest;
+          pushBarsToChartRef.current(merged, { shiftPrepended: prepended ? added : 0 });
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      } finally {
+        fillingRef.current = false;
+      }
+    };
+    fillHistoryRef.current = () => {
+      void fillHistory();
+    };
+
+    const onRange = () => {
+      if (rangeAdjustingRef.current || fillingRef.current) return;
+      fillHistoryRef.current();
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
     const ro = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
@@ -98,35 +281,46 @@ export function CandleChart({
     ro.observe(containerRef.current);
     return () => {
       ro.disconnect();
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.remove();
       chartRef.current = null;
       candleRef.current = null;
       volumeRef.current = null;
       maRefs.current.clear();
       levelLinesRef.current = [];
+      trendlineSeriesRef.current = [];
     };
   }, []);
 
   useEffect(() => {
-    if (!candleRef.current || !volumeRef.current || bars.length === 0) return;
-    candleRef.current.setData(
-      bars.map((b) => ({
-        time: b.time as Time,
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close,
-      })),
-    );
-    volumeRef.current.setData(
-      bars.map((b) => ({
-        time: b.time as Time,
-        value: b.volume,
-        color: b.close >= b.open ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)",
-      })),
-    );
-    chartRef.current?.timeScale().fitContent();
-  }, [bars]);
+    chartRef.current?.applyOptions({
+      timeScale: { timeVisible: intraday, secondsVisible: false },
+      localization: chartLocalization(timezone, intraday),
+    });
+  }, [timezone, intraday]);
+
+  const applyBarData = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart || bars.length === 0) return;
+
+    const prev = prevBarMetaRef.current;
+    const prepended =
+      prev.len > 0 &&
+      bars.length > prev.len &&
+      bars[0]?.time !== prev.firstTime;
+    const added = prepended ? bars.length - prev.len : 0;
+
+    pushBarsToChart(bars, {
+      fit: shouldFitRef.current,
+      shiftPrepended: shouldFitRef.current ? 0 : added,
+    });
+    shouldFitRef.current = false;
+    requestAnimationFrame(() => fillHistoryRef.current());
+  }, [bars, pushBarsToChart]);
+
+  useEffect(() => {
+    applyBarData();
+  }, [applyBarData]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -140,18 +334,89 @@ export function CandleChart({
 
     for (const lv of levels) {
       const isHl = highlightedLevel != null && Math.abs(lv.price - highlightedLevel) < 0.01;
-      const color = lv.kind === "resistance" ? "#ef4444" : "#10b981";
+      const isRes = lv.kind === "resistance";
+      let color = isRes ? "#ef4444" : "#10b981";
+      let lineWidth: 1 | 2 | 3 | 4 = isHl ? 3 : 1;
+      let lineStyle: 0 | 1 | 2 | 3 | 4 = 2;
+
+      if (lv.source === "volume_poc") {
+        color = isRes ? "#dc2626" : "#059669";
+        lineStyle = 0;
+        lineWidth = isHl ? 3 : 2;
+      } else if (lv.source === "volume_vah" || lv.source === "volume_val") {
+        color = isRes ? "#f87171" : "#34d399";
+        lineStyle = 3;
+      } else if (lv.source === "trendline") {
+        color = isRes ? "#b91c1c" : "#047857";
+        lineStyle = 1;
+        lineWidth = isHl ? 3 : 2;
+      } else if (lv.flipped) {
+        color = "#d97706";
+        lineStyle = 1;
+        lineWidth = isHl ? 3 : 2;
+      } else if (lv.source.startsWith("fib_")) {
+        color = isRes ? "#9333ea" : "#7c3aed";
+        lineStyle = 2;
+        lineWidth = isHl ? 3 : 1;
+      } else if (lv.ma_aligned.length > 0) {
+        lineWidth = isHl ? 3 : 2;
+      }
+
+      const srcTag =
+        lv.source === "volume_poc"
+          ? "POC"
+          : lv.source.startsWith("fib_")
+            ? lv.source.replace("fib_", "F")
+            : lv.source === "trendline"
+              ? "TL"
+              : lv.flipped
+                ? "X"
+                : isRes
+                  ? "R"
+                  : "S";
       const line = candle.createPriceLine({
         price: lv.price,
         color: isHl ? "#0f172a" : color,
-        lineWidth: isHl ? 2 : 1,
-        lineStyle: 2,
+        lineWidth,
+        lineStyle,
         axisLabelVisible: true,
-        title: lv.kind === "resistance" ? "R" : "S",
+        title: srcTag,
       });
       levelLinesRef.current.push(line);
     }
   }, [levels, highlightedLevel]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    for (const series of trendlineSeriesRef.current) {
+      chart.removeSeries(series);
+    }
+    trendlineSeriesRef.current = [];
+
+    for (const tl of trendlines) {
+      const span = Math.max(tl.t2 - tl.t1, 1);
+      const slope = (tl.p2 - tl.p1) / span;
+      const t0 = tl.t1 - span;
+      const p0 = tl.p1 - slope * span;
+      const series = chart.addSeries(LineSeries, {
+        color: tl.kind === "resistance" ? "rgba(239,68,68,0.8)" : "rgba(16,185,129,0.8)",
+        lineWidth: 2,
+        lineStyle: 0,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      series.setData([
+        { time: t0 as Time, value: p0 },
+        { time: tl.t1 as Time, value: tl.p1 },
+        { time: tl.t2 as Time, value: tl.p2 },
+        { time: tl.t_end as Time, value: tl.p_end },
+      ]);
+      trendlineSeriesRef.current.push(series);
+    }
+  }, [trendlines]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -188,9 +453,19 @@ export function CandleChart({
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">{symbol}</h1>
-          <p className="text-xs text-slate-500">{interval} · US equities</p>
+          <p className="text-xs text-slate-500">
+            {interval} · {tzLabel}
+            {extendedHours ? " · 含盘前盘后" : " · 仅正常盘"}
+            {hasMoreHistory ? " · 缩小自动加载更早" : " · 已到最早数据"}
+            {" · 线型: POC实线 TL斜线 斐波紫虚线"}
+          </p>
         </div>
       </div>
+      {loadingMore && !loading && (
+        <div className="pointer-events-none absolute left-3 top-14 z-10 rounded bg-white/90 px-2 py-1 text-xs text-slate-600 shadow">
+          加载更早 K 线…
+        </div>
+      )}
       {loading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
           <Skeleton className="h-full w-full" />

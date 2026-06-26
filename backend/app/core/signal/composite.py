@@ -9,6 +9,7 @@ import pandas as pd
 from .subscores import (
     bollinger_score,
     momentum_score,
+    position_score,
     trend_score,
     vol_regime_score,
     volume_score,
@@ -22,11 +23,12 @@ from .verdict import Verdict, bucket
 # and trend at the expense of Bollinger %B (which was the noisiest of the
 # five) and lift mean alpha to +1.63% with the same 200 cases.
 WEIGHTS: dict[str, float] = {
-    "trend": 0.35,
-    "momentum": 0.20,
+    "trend": 0.31,
+    "momentum": 0.18,
     "bollinger": 0.05,
-    "volume": 0.30,
-    "vol_regime": 0.10,
+    "volume": 0.26,
+    "vol_regime": 0.08,
+    "position": 0.12,
 }
 
 
@@ -43,11 +45,12 @@ class ScoreBreakdown:
         return {k: self.components[k] * self.weights[k] for k in self.components}
 
 
-def compute_score(df: pd.DataFrame) -> ScoreBreakdown:
+def compute_score(df: pd.DataFrame, levels: list | None = None) -> ScoreBreakdown:
     """Compute the 0-100 composite score plus a verdict bucket.
 
     Input must already have indicators applied
     (see ``quant.indicators.compute_all``).
+    Optional ``levels`` from ``compute_levels`` feed the position sub-score.
     """
 
     components = {
@@ -56,6 +59,7 @@ def compute_score(df: pd.DataFrame) -> ScoreBreakdown:
         "bollinger": bollinger_score(df),
         "volume": volume_score(df),
         "vol_regime": vol_regime_score(df),
+        "position": position_score(df, levels or []),
     }
     composite = sum(components[k] * WEIGHTS[k] for k in components)
     return ScoreBreakdown(

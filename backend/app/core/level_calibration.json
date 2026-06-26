@@ -1,0 +1,45 @@
+{
+  "blend_bounce": 0.25,
+  "blend_hit_rate": 0.5,
+  "blend_heuristic_with_hit": 0.57,
+  "ma_bonus_per": 4.0,
+  "ma_bonus_cap": 12.0,
+  "source_bonus": {
+    "swing": 12,
+    "volume_poc": 10,
+    "volume_vah": 6,
+    "volume_val": 6,
+    "trendline": 9,
+    "fib_236": 3,
+    "fib_382": 5,
+    "fib_500": 3,
+    "fib_618": 10,
+    "fib_786": 3
+  },
+  "calibrated_at": "2026-06-26T05:59:27.191352+00:00",
+  "sample_symbols": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "SPY",
+    "QQQ",
+    "JPM",
+    "V",
+    "UNH",
+    "XOM",
+    "AMD",
+    "NFLX"
+  ],
+  "source_hit_rates": {
+    "swing": 65.2,
+    "fib_500": 0.0,
+    "fib_786": 36.4,
+    "trendline": 70.0,
+    "fib_382": 50.0,
+    "fib_236": 25.0
+  }
+}

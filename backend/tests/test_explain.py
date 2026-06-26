@@ -23,12 +23,12 @@ def test_explain_verdict_has_reasons() -> None:
     score = ScoreBreakdown(
         composite=52.0,
         verdict=Verdict.HOLD,
-        components={"trend": 48.0, "momentum": 55.0, "bollinger": 50.0, "volume": 52.0, "vol_regime": 50.0},
+        components={"trend": 48.0, "momentum": 55.0, "bollinger": 50.0, "volume": 52.0, "vol_regime": 50.0, "position": 50.0},
     )
     df = pd.DataFrame([_sample_row()])
     zh, en, reasons = explain_verdict(score, df)
     assert "观望" in zh or "Hold" in en
-    assert len(reasons) == 5
+    assert len(reasons) == 6
     assert all(r.text_zh and r.text_en for r in reasons)
 
 

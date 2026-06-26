@@ -16,11 +16,30 @@ class MarketDataService:
         symbol: str,
         interval: str = "1H",
         limit: int = 300,
-    ) -> pd.DataFrame:
+        *,
+        extended_hours: bool = True,
+        before: int | None = None,
+    ) -> tuple[pd.DataFrame, bool]:
         if interval not in VALID_INTERVALS:
             raise ValueError(f"invalid interval {interval}")
-        raw = fetch_warmup_bars(symbol, interval, limit=limit, regular_hours_only=True)
-        return compute_all(raw)
+        before_ts = None
+        if before is not None:
+            before_ts = pd.Timestamp(before, unit="s", tz="UTC")
+        raw = fetch_warmup_bars(
+            symbol,
+            interval,
+            limit=limit,
+            regular_hours_only=not extended_hours,
+            before=before_ts,
+        )
+        if raw.empty:
+            return raw, False
+        if before_ts is not None:
+            has_more = len(raw) >= limit
+        else:
+            # Initial load: allow pagination until a `before` request returns empty.
+            has_more = len(raw) > 0
+        return compute_all(raw), has_more
 
     def fetch_daily_enriched(self, symbol: str, limit: int = 400) -> pd.DataFrame:
         raw = fetch_warmup_bars(symbol, "1D", limit=limit, regular_hours_only=False)

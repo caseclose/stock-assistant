@@ -36,6 +36,17 @@ export type VerdictReason = {
   text_en: string;
 };
 
+export type TrendlineItem = {
+  kind: "resistance" | "support";
+  t1: number;
+  p1: number;
+  t2: number;
+  p2: number;
+  t_end: number;
+  p_end: number;
+  strength: number;
+};
+
 export type LevelItem = {
   price: number;
   kind: "resistance" | "support";
@@ -43,6 +54,12 @@ export type LevelItem = {
   touches: number;
   pivots: number;
   distance_pct: number;
+  source: string;
+  flipped: boolean;
+  bounce_rate: number | null;
+  volume_score: number;
+  hit_rate: number | null;
+  ma_aligned: string[];
   reason_zh: string;
   reason_en: string;
 };
@@ -54,6 +71,17 @@ export type MovingAverage = {
   distance_pct: number;
 };
 
+export type MarketStatus = {
+  status: string;
+  label_zh: string;
+  label_en: string;
+  is_extended: boolean;
+  is_open: boolean;
+  now_ny: string;
+  next_transition: string;
+  countdown: string;
+};
+
 export type Analysis = {
   symbol: string;
   interval: string;
@@ -63,6 +91,7 @@ export type Analysis = {
   summary_en: string;
   verdict_reasons: VerdictReason[];
   levels: LevelItem[];
+  trendlines: TrendlineItem[];
   moving_averages: MovingAverage[];
   components: Record<string, number>;
 };
@@ -87,6 +116,10 @@ export function fetchWatchlist() {
   return api<{ items: WatchlistItem[] }>("/api/watchlist");
 }
 
+export function fetchMarketStatus() {
+  return api<MarketStatus>("/api/market/status");
+}
+
 export function addToWatchlist(symbol: string) {
   return api<{ ok: boolean }>("/api/watchlist", {
     method: "POST",
@@ -100,24 +133,48 @@ export function removeFromWatchlist(symbol: string) {
   });
 }
 
-export function fetchBars(symbol: string, interval: Interval, limit = 300) {
-  const q = new URLSearchParams({ interval, limit: String(limit) });
-  return api<{ symbol: string; interval: string; bars: Bar[] }>(
+export function fetchBars(
+  symbol: string,
+  interval: Interval,
+  limit = 300,
+  extendedHours = true,
+  before?: number,
+) {
+  const q = new URLSearchParams({
+    interval,
+    limit: String(limit),
+    extended_hours: String(extendedHours),
+  });
+  if (before != null) {
+    q.set("before", String(before));
+  }
+  return api<{ symbol: string; interval: string; bars: Bar[]; has_more: boolean }>(
     `/api/symbols/${encodeURIComponent(symbol)}/bars?${q}`,
   );
 }
 
-export function fetchAnalysis(symbol: string, interval: Interval) {
-  const q = new URLSearchParams({ interval });
+export function fetchAnalysis(
+  symbol: string,
+  interval: Interval,
+  extendedHours = true,
+) {
+  const q = new URLSearchParams({
+    interval,
+    extended_hours: String(extendedHours),
+  });
   return api<Analysis>(
     `/api/symbols/${encodeURIComponent(symbol)}/analysis?${q}`,
   );
 }
 
-export function subscribeStream(symbol: string, interval: Interval) {
+export function subscribeStream(
+  symbol: string,
+  interval: Interval,
+  extendedHours = true,
+) {
   return api<{ ok: boolean }>("/api/stream/subscribe", {
     method: "POST",
-    body: JSON.stringify({ symbol, interval }),
+    body: JSON.stringify({ symbol, interval, extended_hours: extendedHours }),
   });
 }
 

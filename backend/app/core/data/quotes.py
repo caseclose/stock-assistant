@@ -10,12 +10,16 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockSnapshotRequest
 
 from app.core.config import get_settings
+from app.core.market import MarketStatus, current_market_state
 from app.core.data.yahoo import YahooQuote, fetch_yahoo_quotes
 
 log = logging.getLogger(__name__)
 
 _client_lock = threading.Lock()
 _shared_client: Optional[StockHistoricalDataClient] = None
+_WL_CACHE: dict[tuple[str, ...], tuple[float, dict[str, YahooQuote]]] = {}
+_STALE: dict[str, YahooQuote] = {}
+_CACHE_TTL = 15.0
 
 
 def _alpaca_client() -> Optional[StockHistoricalDataClient]:
@@ -28,8 +32,19 @@ def _alpaca_client() -> Optional[StockHistoricalDataClient]:
             _shared_client = StockHistoricalDataClient(
                 settings.alpaca_api_key,
                 settings.alpaca_secret_key,
+                url_override=settings.alpaca_data_url_override(),
             )
     return _shared_client
+
+
+def _session_market_state() -> str:
+    mapping = {
+        MarketStatus.PRE_MARKET: "PRE",
+        MarketStatus.REGULAR: "REGULAR",
+        MarketStatus.AFTER_HOURS: "POST",
+        MarketStatus.CLOSED: "CLOSED",
+    }
+    return mapping[current_market_state().status]
 
 
 def _alpaca_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
@@ -73,7 +88,7 @@ def _alpaca_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
             price=price,
             rth_price=rth,
             prev_close=prev_close,
-            market_state="REGULAR",
+            market_state=_session_market_state(),
             bid=bid,
             ask=ask,
         )
@@ -81,11 +96,35 @@ def _alpaca_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
 
 
 def fetch_watchlist_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
-    """Yahoo first (ext-hours aware), Alpaca snapshot for any misses."""
+    """Alpaca batch first (fast); Yahoo only for gaps when not rate-limited."""
     if not symbols:
         return {}
-    out = fetch_yahoo_quotes(symbols)
-    missing = tuple(s for s in symbols if s not in out)
-    if missing:
-        out.update(_alpaca_quotes(missing))
+
+    import time
+
+    key = tuple(sorted(symbols))
+    now = time.time()
+    cached = _WL_CACHE.get(key)
+    if cached and now - cached[0] < _CACHE_TTL:
+        return cached[1]
+
+    out = _alpaca_quotes(symbols)
+    session = current_market_state()
+    # During extended hours, prefer Yahoo session-specific prices when available.
+    if session.is_extended:
+        yahoo = fetch_yahoo_quotes(symbols)
+        for sym, q in yahoo.items():
+            out[sym] = q
+    else:
+        missing = tuple(s for s in symbols if s not in out)
+        if missing:
+            out.update(fetch_yahoo_quotes(missing))
+
+    for sym in symbols:
+        if sym in out:
+            _STALE[sym] = out[sym]
+        elif sym in _STALE:
+            out[sym] = _STALE[sym]
+
+    _WL_CACHE[key] = (now, out)
     return out

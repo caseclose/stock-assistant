@@ -41,7 +41,8 @@ class WatchlistService:
             ).fetchall()
         return [r["symbol"] for r in rows]
 
-    def add(self, symbol: str) -> None:
+    def add(self, symbol: str) -> bool:
+        """Insert symbol. Returns True if newly added, False if already present."""
         sym = symbol.strip().upper()
         if not sym:
             raise ValueError("empty symbol")
@@ -50,7 +51,7 @@ class WatchlistService:
                 "SELECT 1 FROM watchlist WHERE symbol = ?", (sym,)
             ).fetchone()
             if existing:
-                return
+                return False
             count = conn.execute("SELECT COUNT(*) AS n FROM watchlist").fetchone()["n"]
             if count >= MAX_SYMBOLS:
                 raise ValueError(f"watchlist full (max {MAX_SYMBOLS} symbols)")
@@ -60,6 +61,7 @@ class WatchlistService:
                 "INSERT INTO watchlist(symbol, position) VALUES (?, ?)",
                 (sym, pos),
             )
+        return True
 
     def remove(self, symbol: str) -> bool:
         sym = symbol.strip().upper()

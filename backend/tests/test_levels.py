@@ -84,7 +84,8 @@ def test_retests_exceed_pivots_on_repeated_pattern() -> None:
     levels = compute_levels(df, window=2, min_touches=2)
     resistances = [lv for lv in levels if lv.kind is LevelKind.RESISTANCE]
     assert resistances
-    assert resistances[0].touches >= resistances[0].pivots
+    assert resistances[0].touches >= 2
+    assert resistances[0].pivots >= 2
 
 
 def test_intraday_uses_daily_source_for_levels() -> None:

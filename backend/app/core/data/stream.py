@@ -12,6 +12,7 @@ from alpaca.data.enums import DataFeed
 from alpaca.data.live import StockDataStream
 
 from app.core.config import get_settings
+from app.core.rth import bar_gap_minutes, is_regular_hours_bar
 
 log = logging.getLogger(__name__)
 
@@ -39,31 +40,31 @@ class LiveBarBuffer:
         symbol: str,
         warmup: pd.DataFrame,
         max_rows: int = 500,
-        regular_hours_only: bool = True,
+        regular_hours_only: bool = False,
+        timeframe_label: str = "1H",
     ):
         self.symbol = symbol
         self._df = warmup.copy()
         self._max_rows = max_rows
         self._lock = threading.Lock()
         self._rth_only = regular_hours_only
+        self._timeframe_label = timeframe_label
         self.last_quote: LiveQuote | None = None
 
     def snapshot(self) -> pd.DataFrame:
         with self._lock:
             return self._df.copy()
 
-    @staticmethod
-    def _is_regular_hours(ts: pd.Timestamp) -> bool:
-        # Tz-naive timestamps from Alpaca are UTC; tz_convert on a naive
-        # Timestamp raises, so we localise first.
-        if ts.tz is None:
-            ts_ny = ts.tz_localize("UTC").tz_convert("America/New_York")
-        else:
-            ts_ny = ts.tz_convert("America/New_York")
-        if ts_ny.weekday() >= 5:
-            return False
-        minutes = ts_ny.hour * 60 + ts_ny.minute
-        return 570 <= minutes < 960  # 09:30 inclusive, 16:00 exclusive
+    def _gap_minutes(self) -> float:
+        with self._lock:
+            if len(self._df) >= 2:
+                return bar_gap_minutes(self._df.index)
+            return {"1Min": 1, "5Min": 5, "15Min": 15, "1H": 60, "1D": 1440}.get(
+                self._timeframe_label, 60,
+            )
+
+    def _is_regular_hours(self, ts: pd.Timestamp) -> bool:
+        return is_regular_hours_bar(ts, gap_min=self._gap_minutes())
 
     async def on_bar(self, bar) -> None:  # noqa: ANN001 — alpaca Bar model
         ts = pd.Timestamp(bar.timestamp)
@@ -114,6 +115,7 @@ def start_stream(symbol: str, buffer: LiveBarBuffer) -> tuple[threading.Thread, 
         settings.alpaca_api_key,
         settings.alpaca_secret_key,
         feed=DataFeed.IEX,
+        url_override=settings.alpaca_data_url_override(),
     )
     stream.subscribe_bars(buffer.on_bar, symbol)
     stream.subscribe_quotes(buffer.on_quote, symbol)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchAnalysis,
   fetchBars,
@@ -12,7 +12,11 @@ import {
   type Bar,
   type Interval,
 } from "@/lib/api";
+import { mergeBars } from "@/lib/bars";
 import { DisclaimerBanner } from "@/components/layout/DisclaimerBanner";
+import { MarketStatusBar } from "@/components/layout/MarketStatusBar";
+import { TimezoneProvider } from "@/components/layout/TimezoneContext";
+import { TimezoneToggle } from "@/components/layout/TimezoneToggle";
 import { WatchlistPanel } from "@/components/watchlist/WatchlistPanel";
 import { CandleChart, MA_CONFIG } from "@/components/chart/CandleChart";
 import { AnalysisPanel } from "@/components/analysis/AnalysisPanel";
@@ -25,14 +29,29 @@ const DEFAULT_MAS = new Set(["sma20", "ema20", "ema50"]);
 export function AppShell() {
   const [symbol, setSymbol] = useState<string | null>(null);
   const [interval, setInterval] = useState<Interval>("1H");
+  const [extendedHours, setExtendedHours] = useState(true);
   const [bars, setBars] = useState<Bar[]>([]);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [enabledMas, setEnabledMas] = useState<Set<string>>(() => new Set(DEFAULT_MAS));
   const [barsLoading, setBarsLoading] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [barsError, setBarsError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [streamWarning, setStreamWarning] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [highlightedLevel, setHighlightedLevel] = useState<number | null>(null);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const barsRef = useRef<Bar[]>([]);
+
+  useEffect(() => {
+    barsRef.current = bars;
+  }, [bars]);
+  useEffect(() => {
+    hasMoreRef.current = hasMoreHistory;
+  }, [hasMoreHistory]);
 
   useEffect(() => {
     fetchWatchlist()
@@ -42,15 +61,21 @@ export function AppShell() {
       .catch(() => {});
   }, [symbol]);
 
-  const loadChart = useCallback(async (sym: string, iv: Interval) => {
+  const loadChart = useCallback(async (sym: string, iv: Interval, ext: boolean) => {
     setBarsLoading(true);
     setBarsError(null);
+    setHistoryError(null);
     try {
-      const [barsRes] = await Promise.all([
-        fetchBars(sym, iv),
-        subscribeStream(sym, iv).catch(() => {}),
-      ]);
+      const barsRes = await fetchBars(sym, iv, 500, ext);
+      try {
+        await subscribeStream(sym, iv, ext);
+        setStreamWarning(null);
+      } catch {
+        setStreamWarning("实时流连接失败，图表将仅定期刷新");
+      }
       setBars(barsRes.bars);
+      barsRef.current = barsRes.bars;
+      setHasMoreHistory(barsRes.has_more);
     } catch (e) {
       setBarsError(e instanceof Error ? e.message : "K线加载失败");
       setBars([]);
@@ -59,11 +84,43 @@ export function AppShell() {
     }
   }, []);
 
-  const loadAnalysis = useCallback(async (sym: string, iv: Interval) => {
+  const handleLoadMore = useCallback(
+    async (beforeTime: number): Promise<Bar[] | null> => {
+      if (!symbol || loadingMoreRef.current || !hasMoreRef.current) {
+        return barsRef.current.length ? barsRef.current : null;
+      }
+      loadingMoreRef.current = true;
+      setLoadingMore(true);
+      try {
+        const res = await fetchBars(symbol, interval, 500, extendedHours, beforeTime);
+        if (res.bars.length === 0) {
+          setHasMoreHistory(false);
+          hasMoreRef.current = false;
+          return null;
+        }
+        const merged = mergeBars(res.bars, barsRef.current);
+        barsRef.current = merged;
+        setBars(merged);
+        const hasMore = res.has_more;
+        setHasMoreHistory(hasMore);
+        hasMoreRef.current = hasMore;
+        return merged;
+      } catch (e) {
+        setHistoryError(e instanceof Error ? e.message : "加载更早 K 线失败");
+        return barsRef.current.length ? barsRef.current : null;
+      } finally {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    },
+    [symbol, interval, extendedHours],
+  );
+
+  const loadAnalysis = useCallback(async (sym: string, iv: Interval, ext: boolean) => {
     setAnalysisLoading(true);
     setAnalysisError(null);
     try {
-      const res = await fetchAnalysis(sym, iv);
+      const res = await fetchAnalysis(sym, iv, ext);
       setAnalysis(res);
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : "分析加载失败");
@@ -75,9 +132,10 @@ export function AppShell() {
 
   useEffect(() => {
     if (!symbol) return;
-    loadChart(symbol, interval);
-    loadAnalysis(symbol, interval);
-  }, [symbol, interval, loadChart, loadAnalysis]);
+    setHasMoreHistory(true);
+    loadChart(symbol, interval, extendedHours);
+    loadAnalysis(symbol, interval, extendedHours);
+  }, [symbol, interval, extendedHours, loadChart, loadAnalysis]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -86,6 +144,9 @@ export function AppShell() {
 
     function connect() {
       ws = new WebSocket(streamWsUrl());
+      ws.onopen = () => {
+        setStreamWarning(null);
+      };
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data) as {
@@ -94,6 +155,7 @@ export function AppShell() {
             interval: string;
             bar: Bar;
           };
+          if (msg.type === "ping") return;
           if (msg.type !== "bar" || msg.symbol !== symbol || msg.interval !== interval) return;
           setBars((prev) => {
             if (prev.length === 0) return [msg.bar];
@@ -128,8 +190,10 @@ export function AppShell() {
   }
 
   return (
+    <TimezoneProvider>
     <div className="flex h-screen flex-col bg-white text-slate-900">
       <DisclaimerBanner />
+      <MarketStatusBar />
       <div className="flex min-h-0 flex-1">
         <WatchlistPanel
           selected={symbol}
@@ -156,6 +220,14 @@ export function AppShell() {
                 </Button>
               ))}
             </div>
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+              <Checkbox
+                checked={extendedHours}
+                onCheckedChange={(v) => setExtendedHours(v === true)}
+              />
+              <span>盘前盘后</span>
+            </label>
+            <TimezoneToggle />
             <div className="ml-auto flex flex-wrap items-center gap-3">
               {MA_CONFIG.map((ma) => (
                 <label key={ma.key} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
@@ -173,15 +245,30 @@ export function AppShell() {
               {barsError}
             </div>
           )}
+          {streamWarning && !barsError && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              {streamWarning}
+            </div>
+          )}
+          {historyError && !barsLoading && (
+            <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+              {historyError}
+            </div>
+          )}
           {symbol ? (
             <CandleChart
               symbol={symbol}
               interval={interval}
               bars={bars}
               levels={analysis?.levels ?? []}
+              trendlines={analysis?.trendlines ?? []}
               enabledMas={enabledMas}
               loading={barsLoading}
               highlightedLevel={highlightedLevel}
+              extendedHours={extendedHours}
+              hasMoreHistory={hasMoreHistory}
+              loadingMore={loadingMore}
+              onLoadMore={handleLoadMore}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center text-slate-500">
@@ -197,5 +284,6 @@ export function AppShell() {
         />
       </div>
     </div>
+    </TimezoneProvider>
   );
 }

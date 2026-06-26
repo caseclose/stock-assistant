@@ -33,6 +33,23 @@ function verdictLabel(verdict: string) {
   return map[verdict] ?? verdict;
 }
 
+function sourceLabel(source: string) {
+  const map: Record<string, string> = {
+    swing: "摆动",
+    volume_poc: "POC",
+    volume_vah: "VAH",
+    volume_val: "VAL",
+    psychological: "整数",
+    trendline: "趋势线",
+    fib_236: "F23.6",
+    fib_382: "F38.2",
+    fib_500: "F50",
+    fib_618: "F61.8",
+    fib_786: "F78.6",
+  };
+  return map[source] ?? source;
+}
+
 function LevelCard({
   lv,
   onHover,
@@ -48,15 +65,29 @@ function LevelCard({
       onMouseEnter={() => onHover(lv.price)}
       onMouseLeave={() => onHover(null)}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <Badge variant={isRes ? "danger" : "success"}>
           {isRes ? "压力" : "支撑"} ${lv.price.toFixed(2)}
         </Badge>
-        <span className="text-xs text-slate-500">强度 {lv.strength.toFixed(0)}</span>
+        <div className="flex items-center gap-1">
+          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">
+            {sourceLabel(lv.source)}
+          </span>
+          {lv.flipped && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
+              翻转
+            </span>
+          )}
+          <span className="text-xs text-slate-500">强度 {lv.strength.toFixed(0)}</span>
+        </div>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-slate-600">{lv.reason_zh}</p>
       <p className="mt-1 text-[11px] text-slate-400">
-        {lv.touches} 次回踩 · {lv.pivots} pivots · {lv.distance_pct > 0 ? "+" : ""}
+        {lv.touches} 次回踩 · {lv.pivots} pivots · 量能 {lv.volume_score.toFixed(0)}
+        {lv.bounce_rate != null ? ` · 守住 ${lv.bounce_rate.toFixed(0)}%` : ""}
+        {lv.hit_rate != null ? ` · 回测 ${lv.hit_rate.toFixed(0)}%` : ""}
+        {lv.ma_aligned.length > 0 ? ` · ${lv.ma_aligned.join("/")}` : ""} ·{" "}
+        {lv.distance_pct > 0 ? "+" : ""}
         {lv.distance_pct.toFixed(2)}%
       </p>
     </button>
@@ -173,6 +204,20 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
           </Card>
 
           <Separator />
+
+          {analysis.trendlines.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-800">趋势线 Trendlines</h3>
+              <div className="space-y-1 text-xs text-slate-600">
+                {analysis.trendlines.map((tl, i) => (
+                  <div key={`tl-${i}`} className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                    {tl.kind === "resistance" ? "压力" : "支撑"}斜线 · 强度 {tl.strength.toFixed(0)} ·
+                    终点 ${tl.p_end.toFixed(2)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <h3 className="mb-2 text-sm font-semibold text-slate-800">压力位 Resistance</h3>
