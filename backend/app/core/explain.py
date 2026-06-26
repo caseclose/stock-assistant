@@ -28,6 +28,7 @@ class LevelExplanation:
     pivots: int
     distance_pct: float
     source: str
+    proximity: str
     flipped: bool
     bounce_rate: float | None
     volume_score: float
@@ -49,6 +50,13 @@ _SOURCE_ZH = {
     "fib_500": "斐波那契 50%",
     "fib_618": "斐波那契 61.8%",
     "fib_786": "斐波那契 78.6%",
+    "ma_sma20": "SMA20 均线",
+    "ma_sma50": "SMA50 均线",
+    "ma_sma60": "SMA60 均线",
+    "ma_sma120": "SMA120 均线",
+    "ma_sma200": "SMA200 均线",
+    "ma_ema20": "EMA20 均线",
+    "ma_ema50": "EMA50 均线",
 }
 _SOURCE_EN = {
     "swing": "swing structure",
@@ -62,6 +70,13 @@ _SOURCE_EN = {
     "fib_500": "Fibonacci 50%",
     "fib_618": "Fibonacci 61.8%",
     "fib_786": "Fibonacci 78.6%",
+    "ma_sma20": "SMA20",
+    "ma_sma50": "SMA50",
+    "ma_sma60": "SMA60",
+    "ma_sma120": "SMA120",
+    "ma_sma200": "SMA200",
+    "ma_ema20": "EMA20",
+    "ma_ema50": "EMA50",
 }
 
 
@@ -145,6 +160,8 @@ def explain_level(lv: Level, *, daily_sourced: bool) -> LevelExplanation:
     kind_zh = "压力位" if lv.kind is LevelKind.RESISTANCE else "支撑位"
     kind_en = "resistance" if lv.kind is LevelKind.RESISTANCE else "support"
     timeframe = "日线" if daily_sourced else "当前周期"
+    prox_zh = "近端" if lv.proximity.value == "near" else "远端"
+    prox_en = "near-term" if lv.proximity.value == "near" else "structural"
     src_zh = _SOURCE_ZH.get(lv.source, lv.source)
     src_en = _SOURCE_EN.get(lv.source, lv.source)
     flip_zh = "（原支撑跌破转压力）" if lv.flipped and lv.kind is LevelKind.RESISTANCE else (
@@ -161,12 +178,12 @@ def explain_level(lv: Level, *, daily_sourced: bool) -> LevelExplanation:
     ma_zh = f"，均线汇合 {', '.join(lv.ma_aligned)}" if lv.ma_aligned else ""
     ma_en = f", MA confluence {', '.join(lv.ma_aligned)}" if lv.ma_aligned else ""
     reason_zh = (
-        f"{timeframe}{src_zh}：{kind_zh} ${lv.price:.2f}{flip_zh}，强度 {lv.strength:.0f}；"
+        f"{prox_zh}{timeframe}{src_zh}：{kind_zh} ${lv.price:.2f}{flip_zh}，强度 {lv.strength:.0f}；"
         f"回踩 {lv.touches} 次（{lv.pivots} pivot），量能分 {lv.volume_score:.0f}{bounce_zh}{hit_zh}{ma_zh}；"
         f"距现价 {lv.distance_pct:+.2f}%，最近触及 {touch_date}"
     )
     reason_en = (
-        f"{src_en} on {timeframe}: {kind_en} ${lv.price:.2f}{flip_en}, strength {lv.strength:.0f}; "
+        f"{prox_en} {src_en} on {timeframe}: {kind_en} ${lv.price:.2f}{flip_en}, strength {lv.strength:.0f}; "
         f"{lv.touches} retests ({lv.pivots} pivots), vol-score {lv.volume_score:.0f}{bounce_en}{hit_en}{ma_en}; "
         f"{lv.distance_pct:+.2f}% from price, last touch {touch_date}"
     )
@@ -178,6 +195,7 @@ def explain_level(lv: Level, *, daily_sourced: bool) -> LevelExplanation:
         pivots=lv.pivots,
         distance_pct=lv.distance_pct,
         source=lv.source,
+        proximity=lv.proximity.value,
         flipped=lv.flipped,
         bounce_rate=lv.bounce_rate,
         volume_score=lv.volume_score,

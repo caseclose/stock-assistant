@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pandas as pd
 from alpaca.common.enums import Sort
 from alpaca.data.enums import Adjustment
@@ -18,6 +20,13 @@ from app.core.rth import filter_regular_hours, is_regular_hours_bar, bar_gap_min
 # - Bollinger 20 / OBV slope window 50
 # 60 is a safe minimum; below this we refuse to compute and tell the user.
 MIN_BARS_FOR_INDICATORS = 60
+
+_BAR_CACHE_TTL_SEC = 45.0
+_bar_cache: dict[tuple, tuple[float, pd.DataFrame]] = {}
+
+
+def clear_bar_cache() -> None:
+    _bar_cache.clear()
 
 # Map UI labels to Alpaca TimeFrame objects.
 TIMEFRAMES: dict[str, TimeFrame] = {
@@ -44,7 +53,22 @@ def fetch_warmup_bars(
 
     When ``before`` is set, returns up to ``limit`` bars strictly older than
     that timestamp (for chart scroll-back pagination).
+    Results are cached briefly to avoid duplicate Alpaca pulls per page load.
     """
+
+    cache_key = (
+        symbol.upper(),
+        timeframe_label,
+        limit,
+        regular_hours_only,
+        None if before is None else int(pd.Timestamp(before).timestamp()),
+    )
+    now_mono = time.monotonic()
+    cached = _bar_cache.get(cache_key)
+    if cached is not None:
+        cached_at, cached_df = cached
+        if now_mono - cached_at < _BAR_CACHE_TTL_SEC:
+            return cached_df.copy()
 
     settings = get_settings()
     if not settings.has_credentials:
@@ -137,4 +161,5 @@ def fetch_warmup_bars(
             "This usually means the ticker is newly listed, recently spun off, "
             "or delisted. Try a more liquid ticker like AAPL, SPY, or QQQ."
         )
+    _bar_cache[cache_key] = (now_mono, bars.copy())
     return bars

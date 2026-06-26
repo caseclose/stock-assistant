@@ -18,7 +18,7 @@ from enum import Enum
 import numpy as np
 import pandas as pd
 
-from app.core.confluence import ma_confluence, trendline_candidates
+from app.core.confluence import ma_confluence, ma_level_candidates, trendline_candidates
 from app.core.fibonacci import fibonacci_candidates
 from app.core.level_backtest import calibrate_strength, source_bonus, walkforward_hit_rate
 from app.core.pivots import adaptive_window as _adaptive_window
@@ -34,11 +34,17 @@ _LOOKBACK_TARGET: dict[str, int] = {
     "10s": 200,
 }
 _SUB_DAILY_FREQS = frozenset({"10s", "1Min", "5Min", "15Min", "1H"})
+NEAR_DISTANCE_PCT = 15.0
 
 
 class LevelKind(str, Enum):
     SUPPORT = "support"
     RESISTANCE = "resistance"
+
+
+class LevelProximity(str, Enum):
+    NEAR = "near"
+    FAR = "far"
 
 
 @dataclass
@@ -52,6 +58,7 @@ class Level:
     distance_pct: float
     source: str = "swing"
     origin: str = "high"
+    proximity: LevelProximity = LevelProximity.NEAR
     flipped: bool = False
     bounce_rate: float | None = None
     volume_score: float = 0.0
@@ -237,11 +244,72 @@ def _source_rank(source: str) -> int:
         return 4
     if source.startswith("volume"):
         return 3
+    if source.startswith("ma_"):
+        return 3
     if source == "trendline":
         return 2
     if source.startswith("fib_"):
         return 1
     return 0
+
+
+def _distance_pct_abs(price: float, close_now: float) -> float:
+    return abs(price / close_now - 1.0) * 100.0
+
+
+def _eligible(
+    c: dict,
+    close_now: float,
+    *,
+    min_touches: int,
+    min_pivots: int,
+    near: bool,
+) -> bool:
+    src = c.get("source", "")
+    dist = _distance_pct_abs(c["price"], close_now)
+    if src.startswith("ma_"):
+        return near and dist <= NEAR_DISTANCE_PCT
+    if src.startswith("fib_"):
+        min_r = 1 if near else 2
+        max_d = NEAR_DISTANCE_PCT if near else 10.0
+        return c.get("retests", 0) >= min_r and dist < max_d
+    if src == "trendline":
+        max_d = NEAR_DISTANCE_PCT if near else 15.0
+        return c.get("pivots", 0) >= 2 and dist <= max_d
+    if near:
+        return (
+            dist <= NEAR_DISTANCE_PCT
+            and c.get("pivots", 0) >= 1
+            and c.get("retests", 0) >= 1
+        )
+    return c.get("pivots", 0) >= min_pivots and c.get("retests", 0) >= min_touches
+
+
+def _pick_from_pool(
+    pool: list[dict],
+    sliced_len: int,
+    top_n: int,
+    *,
+    close_now: float | None = None,
+    near_sort: bool = False,
+) -> list[dict]:
+    primary = [c for c in pool if not str(c.get("source", "")).startswith("fib_")]
+    fib = [c for c in pool if str(c.get("source", "")).startswith("fib_")]
+
+    def sort_key(c: dict) -> tuple:
+        base = _score_cluster(c, sliced_len)
+        if near_sort and close_now is not None:
+            dist = _distance_pct_abs(c["price"], close_now)
+            prox = max(0.0, 1.0 - dist / NEAR_DISTANCE_PCT)
+            base *= 0.4 + 0.6 * prox
+        return (base, _source_rank(c.get("source", "")))
+
+    primary.sort(key=sort_key, reverse=True)
+    fib.sort(key=sort_key, reverse=True)
+    picked = primary[:top_n]
+    if len(picked) < top_n and fib:
+        picked.append(fib[0])
+    return picked[:top_n]
 
 
 def _merge_candidates(candidates: list[dict], tol: float, sliced_len: int) -> list[dict]:
@@ -250,6 +318,10 @@ def _merge_candidates(candidates: list[dict], tol: float, sliced_len: int) -> li
         placed = False
         for m in merged:
             if abs(c["price"] - m["price"]) <= tol:
+                c_ma = str(c.get("source", "")).startswith("ma_")
+                m_ma = str(m.get("source", "")).startswith("ma_")
+                if c_ma != m_ma:
+                    continue
                 if _score_cluster(c, sliced_len) >= _score_cluster(m, sliced_len):
                     m.update({k: v for k, v in c.items() if k != "price"})
                     m["price"] = (m["price"] + c["price"]) / 2
@@ -270,6 +342,7 @@ def _levels_from_slice(
     top_n: int,
     min_touches: int,
     min_pivots: int,
+    ma_row: pd.Series | None = None,
 ) -> list[Level]:
     highs = sliced["high"].to_numpy(dtype=float)
     lows = sliced["low"].to_numpy(dtype=float)
@@ -312,6 +385,10 @@ def _levels_from_slice(
 
     candidates.extend(fibonacci_candidates(sliced, close_now, is_high, is_low))
 
+    row = sliced.iloc[-1]
+    ma_src = ma_row if ma_row is not None else row
+    candidates.extend(ma_level_candidates(ma_src, close_now, sliced.index[-1], max_dist_pct=NEAR_DISTANCE_PCT))
+
     price_range = float(np.max(highs) - np.min(lows))
     _ = price_range  # reserved for future range-aware filters
 
@@ -319,53 +396,66 @@ def _levels_from_slice(
         origin = c.get("origin", "high")
         stats = _retest_stats(sliced, c["price"], tol, origin)
         c.update(stats)
-        c["hit_rate"] = walkforward_hit_rate(sliced, c["price"], tol, origin)
-        kind, flipped = _assign_kind(origin, c["price"], close_now, closes, tol)
-        c["kind"] = kind
-        c["flipped"] = flipped
+        src = c.get("source", "")
+        if src.startswith("ma_"):
+            kind = LevelKind.SUPPORT if c["price"] < close_now else LevelKind.RESISTANCE
+            c["kind"] = kind
+            c["flipped"] = False
+        else:
+            kind, flipped = _assign_kind(origin, c["price"], close_now, closes, tol)
+            c["kind"] = kind
+            c["flipped"] = flipped
 
     candidates = _merge_candidates(candidates, tol, len(sliced))
-    row = sliced.iloc[-1]
 
-    def _eligible(c: dict) -> bool:
-        src = c.get("source", "")
-        if src.startswith("fib_"):
-            return c.get("retests", 0) >= 2 and abs(c["price"] - close_now) / max(close_now, 1e-9) < 0.10
-        if c.get("source") == "trendline":
-            return c.get("pivots", 0) >= 2
-        return c.get("pivots", 0) >= min_pivots and c.get("retests", 0) >= min_touches
+    def _pool_for(kind: LevelKind) -> list[dict]:
+        if kind is LevelKind.RESISTANCE:
+            return [c for c in candidates if c.get("kind") is LevelKind.RESISTANCE and c["price"] > close_now]
+        return [c for c in candidates if c.get("kind") is LevelKind.SUPPORT and c["price"] < close_now]
 
-    resistances = [c for c in candidates if c.get("kind") is LevelKind.RESISTANCE and c["price"] > close_now and _eligible(c)]
-    supports = [c for c in candidates if c.get("kind") is LevelKind.SUPPORT and c["price"] < close_now and _eligible(c)]
-
-    def _pick_top(pool: list[dict]) -> list[dict]:
-        primary = [c for c in pool if not str(c.get("source", "")).startswith("fib_")]
-        fib = [c for c in pool if str(c.get("source", "")).startswith("fib_")]
-        primary.sort(
-            key=lambda c: (_score_cluster(c, len(sliced)), _source_rank(c.get("source", ""))),
-            reverse=True,
+    def _pick_near_far(kind: LevelKind) -> list[tuple[dict, LevelProximity]]:
+        pool = _pool_for(kind)
+        near_pool = [
+            c for c in pool
+            if _distance_pct_abs(c["price"], close_now) <= NEAR_DISTANCE_PCT
+            and _eligible(c, close_now, min_touches=min_touches, min_pivots=min_pivots, near=True)
+        ]
+        far_pool = [
+            c for c in pool
+            if _distance_pct_abs(c["price"], close_now) > NEAR_DISTANCE_PCT
+            and _eligible(c, close_now, min_touches=min_touches, min_pivots=min_pivots, near=False)
+        ]
+        near_n = max(2, top_n // 2 + 1)
+        far_n = max(2, top_n // 2 + 1)
+        near_picked = _pick_from_pool(
+            near_pool, len(sliced), near_n, close_now=close_now, near_sort=True,
         )
-        fib.sort(key=lambda c: _score_cluster(c, len(sliced)), reverse=True)
-        picked = primary[:top_n]
-        if len(picked) < top_n and fib:
-            picked.append(fib[0])
-        return picked[:top_n]
+        near_prices = {round(c["price"], 4) for c in near_picked}
+        far_pool = [c for c in far_pool if round(c["price"], 4) not in near_prices]
+        far_picked = _pick_from_pool(far_pool, len(sliced), far_n)
+        return (
+            [(c, LevelProximity.NEAR) for c in near_picked]
+            + [(c, LevelProximity.FAR) for c in far_picked]
+        )
 
-    resistances = _pick_top(resistances)
-    supports = _pick_top(supports)
+    picked: list[tuple[dict, LevelProximity]] = []
+    picked.extend(_pick_near_far(LevelKind.RESISTANCE))
+    picked.extend(_pick_near_far(LevelKind.SUPPORT))
 
     levels: list[Level] = []
-    for c in resistances:
+    for c, prox in picked:
         ma_al = ma_confluence(c["price"], row, atr_now)
+        hit_rate = walkforward_hit_rate(sliced, c["price"], tol, c.get("origin", "high"))
         sc = calibrate_strength(
             _score_cluster(c, len(sliced)),
             bounce_rate=c.get("bounce_rate"),
-            hit_rate=c.get("hit_rate"),
+            hit_rate=hit_rate,
             ma_aligned=ma_al,
         )
+        kind = c["kind"]
         levels.append(Level(
             price=round(c["price"], 2),
-            kind=LevelKind.RESISTANCE,
+            kind=kind,
             touches=c.get("retests", 0),
             pivots=c.get("pivots", 1),
             strength=round(sc, 1),
@@ -373,37 +463,14 @@ def _levels_from_slice(
             distance_pct=round((c["price"] / close_now - 1.0) * 100.0, 2),
             source=c.get("source", "swing"),
             origin=c.get("origin", "high"),
+            proximity=prox,
             flipped=bool(c.get("flipped")),
             bounce_rate=c.get("bounce_rate"),
             volume_score=round(c.get("volume_score", 0), 1),
-            hit_rate=c.get("hit_rate"),
+            hit_rate=hit_rate,
             ma_aligned=ma_al,
         ))
-    for c in supports:
-        ma_al = ma_confluence(c["price"], row, atr_now)
-        sc = calibrate_strength(
-            _score_cluster(c, len(sliced)),
-            bounce_rate=c.get("bounce_rate"),
-            hit_rate=c.get("hit_rate"),
-            ma_aligned=ma_al,
-        )
-        levels.append(Level(
-            price=round(c["price"], 2),
-            kind=LevelKind.SUPPORT,
-            touches=c.get("retests", 0),
-            pivots=c.get("pivots", 1),
-            strength=round(sc, 1),
-            last_touch=c["last_touch_ts"],
-            distance_pct=round((c["price"] / close_now - 1.0) * 100.0, 2),
-            source=c.get("source", "swing"),
-            origin=c.get("origin", "high"),
-            flipped=bool(c.get("flipped")),
-            bounce_rate=c.get("bounce_rate"),
-            volume_score=round(c.get("volume_score", 0), 1),
-            hit_rate=c.get("hit_rate"),
-            ma_aligned=ma_al,
-        ))
-    levels.sort(key=lambda lv: (lv.kind.value, -lv.strength, abs(lv.distance_pct)))
+    levels.sort(key=lambda lv: (lv.kind.value, lv.proximity.value, -lv.strength, abs(lv.distance_pct)))
     return levels
 
 
@@ -481,4 +548,5 @@ def compute_levels(
         top_n=top_n,
         min_touches=min_touches,
         min_pivots=min_pivots,
+        ma_row=df.iloc[-1] if not df.empty else None,
     )

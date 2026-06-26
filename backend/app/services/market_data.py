@@ -15,7 +15,7 @@ class MarketDataService:
         self,
         symbol: str,
         interval: str = "1H",
-        limit: int = 300,
+        limit: int = 500,
         *,
         extended_hours: bool = True,
         before: int | None = None,

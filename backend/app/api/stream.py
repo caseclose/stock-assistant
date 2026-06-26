@@ -18,7 +18,16 @@ class SubscribeBody(BaseModel):
 @router.post("/api/stream/subscribe")
 async def subscribe_stream(body: SubscribeBody, request: Request):
     hub = request.app.state.stream_hub
-    await hub.subscribe(body.symbol.upper(), body.interval, body.extended_hours)
+    try:
+        await hub.subscribe(body.symbol.upper(), body.interval, body.extended_hours)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "symbol": body.symbol.upper(),
+            "interval": body.interval,
+            "extended_hours": body.extended_hours,
+            "error": str(exc),
+        }
     return {
         "ok": True,
         "symbol": body.symbol.upper(),

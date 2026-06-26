@@ -12,6 +12,10 @@ from app.core.data import LiveBarBuffer, fetch_warmup_bars, start_stream
 
 log = logging.getLogger(__name__)
 
+_SUBSCRIBE_WARMUP_BARS = 80
+_SUBSCRIBE_TIMEOUT_SEC = 25.0
+_STREAM_STOP_GRACE_SEC = 0.4
+
 
 class StreamHub:
     """One Alpaca WS at a time; fan-out bar updates to FastAPI WS clients."""
@@ -47,13 +51,19 @@ class StreamHub:
                     return
 
             try:
-                warmup = await asyncio.to_thread(
-                    fetch_warmup_bars,
-                    symbol,
-                    interval,
-                    200,
-                    not extended_hours,
+                warmup = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        fetch_warmup_bars,
+                        symbol,
+                        interval,
+                        _SUBSCRIBE_WARMUP_BARS,
+                        not extended_hours,
+                    ),
+                    timeout=_SUBSCRIBE_TIMEOUT_SEC,
                 )
+            except asyncio.TimeoutError:
+                log.warning("stream subscribe warmup timed out for %s %s", symbol, interval)
+                raise RuntimeError("stream warmup timed out") from None
             except Exception:
                 log.exception("warmup fetch failed for %s %s", symbol, interval)
                 raise
@@ -74,6 +84,10 @@ class StreamHub:
                 ):
                     return
                 self._stop_stream_locked()
+
+            await asyncio.sleep(_STREAM_STOP_GRACE_SEC)
+
+            with self._lock:
                 thread, stream = start_stream(symbol, buffer)
                 self._symbol = symbol
                 self._interval = interval
@@ -104,6 +118,11 @@ class StreamHub:
 
     def unregister_client(self, q: asyncio.Queue) -> None:
         self._clients.discard(q)
+
+    def shutdown(self) -> None:
+        with self._lock:
+            self._stop_stream_locked()
+        self._clients.clear()
 
     async def _broadcast(self, msg: dict) -> None:
         dead = []

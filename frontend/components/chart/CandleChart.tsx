@@ -335,11 +335,16 @@ export function CandleChart({
     for (const lv of levels) {
       const isHl = highlightedLevel != null && Math.abs(lv.price - highlightedLevel) < 0.01;
       const isRes = lv.kind === "resistance";
+      const isFar = lv.proximity === "far";
       let color = isRes ? "#ef4444" : "#10b981";
       let lineWidth: 1 | 2 | 3 | 4 = isHl ? 3 : 1;
-      let lineStyle: 0 | 1 | 2 | 3 | 4 = 2;
+      let lineStyle: 0 | 1 | 2 | 3 | 4 = isFar ? 3 : 2;
 
-      if (lv.source === "volume_poc") {
+      if (lv.source.startsWith("ma_")) {
+        color = isRes ? "#f97316" : "#0ea5e9";
+        lineStyle = isFar ? 3 : 0;
+        lineWidth = isHl ? 3 : 2;
+      } else if (lv.source === "volume_poc") {
         color = isRes ? "#dc2626" : "#059669";
         lineStyle = 0;
         lineWidth = isHl ? 3 : 2;
@@ -363,7 +368,9 @@ export function CandleChart({
       }
 
       const srcTag =
-        lv.source === "volume_poc"
+        lv.source.startsWith("ma_")
+          ? lv.source.replace("ma_", "").toUpperCase()
+          : lv.source === "volume_poc"
           ? "POC"
           : lv.source.startsWith("fib_")
             ? lv.source.replace("fib_", "F")
@@ -376,7 +383,7 @@ export function CandleChart({
                   : "S";
       const line = candle.createPriceLine({
         price: lv.price,
-        color: isHl ? "#0f172a" : color,
+        color: isHl ? "#0f172a" : isFar ? `${color}99` : color,
         lineWidth,
         lineStyle,
         axisLabelVisible: true,

@@ -55,6 +55,7 @@ export type LevelItem = {
   pivots: number;
   distance_pct: number;
   source: string;
+  proximity: "near" | "far";
   flipped: boolean;
   bounce_rate: number | null;
   volume_score: number;
@@ -97,19 +98,31 @@ export type Analysis = {
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || res.statusText);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || res.statusText);
+    }
+    return res.json() as Promise<T>;
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("请求超时，请检查后端是否在运行 (localhost:8000)");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  return res.json() as Promise<T>;
 }
 
 export function fetchWatchlist() {
@@ -172,9 +185,14 @@ export function subscribeStream(
   interval: Interval,
   extendedHours = true,
 ) {
-  return api<{ ok: boolean }>("/api/stream/subscribe", {
+  return api<{ ok: boolean; error?: string }>("/api/stream/subscribe", {
     method: "POST",
     body: JSON.stringify({ symbol, interval, extended_hours: extendedHours }),
+  }).then((res) => {
+    if (!res.ok) {
+      throw new Error(res.error ?? "stream subscribe failed");
+    }
+    return res;
   });
 }
 

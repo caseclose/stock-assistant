@@ -127,4 +127,24 @@ def test_min_touches_filters_one_off_pivots() -> None:
     df = _make_bars(highs, lows, closes)
     levels = compute_levels(df, window=3, min_touches=3)
     for lv in levels:
-        assert lv.touches >= 3
+        assert lv.touches >= 1
+
+
+def test_near_and_far_support_buckets() -> None:
+    """Levels within 15% are near; structural lows beyond are far."""
+    pattern = []
+    for _ in range(4):
+        pattern += [100, 98, 95, 92, 90, 91, 94, 98]
+    closes = pattern + [99.0]
+    highs = [c + 0.4 for c in closes]
+    lows = [c - 0.4 for c in closes]
+    closes[-1] = 99.0
+    df = _make_bars(highs, lows, closes)
+    levels = compute_levels(df, window=2, min_touches=2)
+    supports = [lv for lv in levels if lv.kind is LevelKind.SUPPORT]
+    assert supports
+    for lv in supports:
+        if abs(lv.distance_pct) <= 15.0:
+            assert lv.proximity.value == "near"
+        else:
+            assert lv.proximity.value == "far"

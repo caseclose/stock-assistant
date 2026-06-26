@@ -46,6 +46,13 @@ function sourceLabel(source: string) {
     fib_500: "F50",
     fib_618: "F61.8",
     fib_786: "F78.6",
+    ma_sma20: "SMA20",
+    ma_sma50: "SMA50",
+    ma_sma60: "SMA60",
+    ma_sma120: "SMA120",
+    ma_sma200: "SMA200",
+    ma_ema20: "EMA20",
+    ma_ema50: "EMA50",
   };
   return map[source] ?? source;
 }
@@ -58,10 +65,14 @@ function LevelCard({
   onHover: (p: number | null) => void;
 }) {
   const isRes = lv.kind === "resistance";
+  const isNear = lv.proximity === "near";
   return (
     <button
       type="button"
-      className="w-full rounded-lg border border-slate-200 p-3 text-left transition-colors hover:border-slate-400 hover:bg-slate-50"
+      className={cn(
+        "w-full rounded-lg border p-3 text-left transition-colors hover:border-slate-400 hover:bg-slate-50",
+        isNear ? "border-slate-300 bg-white" : "border-dashed border-slate-200 bg-slate-50/80",
+      )}
       onMouseEnter={() => onHover(lv.price)}
       onMouseLeave={() => onHover(null)}
     >
@@ -69,7 +80,15 @@ function LevelCard({
         <Badge variant={isRes ? "danger" : "success"}>
           {isRes ? "压力" : "支撑"} ${lv.price.toFixed(2)}
         </Badge>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px]",
+              isNear ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-600",
+            )}
+          >
+            {isNear ? "近端" : "远端"}
+          </span>
           <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">
             {sourceLabel(lv.source)}
           </span>
@@ -91,6 +110,63 @@ function LevelCard({
         {lv.distance_pct.toFixed(2)}%
       </p>
     </button>
+  );
+}
+
+function LevelSection({
+  title,
+  levels,
+  onHighlightLevel,
+}: {
+  title: string;
+  levels: LevelItem[];
+  onHighlightLevel?: (price: number | null) => void;
+}) {
+  const near = levels.filter((l) => l.proximity === "near");
+  const far = levels.filter((l) => l.proximity === "far");
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-slate-800">{title}</h3>
+      {levels.length === 0 ? (
+        <p className="text-xs text-slate-500">暂无显著{title.includes("压力") ? "压力位" : "支撑位"}</p>
+      ) : (
+        <div className="space-y-3">
+          {near.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-sky-700">
+                近端 · 距现价 ≤15%
+              </p>
+              <div className="space-y-2">
+                {near.map((lv) => (
+                  <LevelCard
+                    key={`near-${lv.kind}-${lv.price}`}
+                    lv={lv}
+                    onHover={onHighlightLevel ?? (() => {})}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {far.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                远端 · 历史结构
+              </p>
+              <div className="space-y-2">
+                {far.map((lv) => (
+                  <LevelCard
+                    key={`far-${lv.kind}-${lv.price}`}
+                    lv={lv}
+                    onHover={onHighlightLevel ?? (() => {})}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -219,29 +295,17 @@ export function AnalysisPanel({ analysis, loading, error, onHighlightLevel }: Pr
             </div>
           )}
 
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-800">压力位 Resistance</h3>
-            <div className="space-y-2">
-              {resistances.length === 0 && (
-                <p className="text-xs text-slate-500">暂无显著压力位</p>
-              )}
-              {resistances.map((lv) => (
-                <LevelCard key={`r-${lv.price}`} lv={lv} onHover={onHighlightLevel ?? (() => {})} />
-              ))}
-            </div>
-          </div>
+          <LevelSection
+            title="压力位 Resistance"
+            levels={resistances}
+            onHighlightLevel={onHighlightLevel}
+          />
 
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-800">支撑位 Support</h3>
-            <div className="space-y-2">
-              {supports.length === 0 && (
-                <p className="text-xs text-slate-500">暂无显著支撑位</p>
-              )}
-              {supports.map((lv) => (
-                <LevelCard key={`s-${lv.price}`} lv={lv} onHover={onHighlightLevel ?? (() => {})} />
-              ))}
-            </div>
-          </div>
+          <LevelSection
+            title="支撑位 Support"
+            levels={supports}
+            onHighlightLevel={onHighlightLevel}
+          />
         </div>
       </ScrollArea>
     </aside>

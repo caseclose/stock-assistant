@@ -67,15 +67,17 @@ export function AppShell() {
     setHistoryError(null);
     try {
       const barsRes = await fetchBars(sym, iv, 500, ext);
-      try {
-        await subscribeStream(sym, iv, ext);
-        setStreamWarning(null);
-      } catch {
-        setStreamWarning("实时流连接失败，图表将仅定期刷新");
-      }
       setBars(barsRes.bars);
       barsRef.current = barsRes.bars;
       setHasMoreHistory(barsRes.has_more);
+      // Defer stream subscribe so chart paint is never blocked.
+      window.setTimeout(() => {
+        void subscribeStream(sym, iv, ext)
+          .then(() => setStreamWarning(null))
+          .catch(() => {
+            setStreamWarning("实时流连接失败，图表将仅定期刷新");
+          });
+      }, 0);
     } catch (e) {
       setBarsError(e instanceof Error ? e.message : "K线加载失败");
       setBars([]);

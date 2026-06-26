@@ -109,16 +109,9 @@ def fetch_watchlist_quotes(symbols: tuple[str, ...]) -> dict[str, YahooQuote]:
         return cached[1]
 
     out = _alpaca_quotes(symbols)
-    session = current_market_state()
-    # During extended hours, prefer Yahoo session-specific prices when available.
-    if session.is_extended:
-        yahoo = fetch_yahoo_quotes(symbols)
-        for sym, q in yahoo.items():
-            out[sym] = q
-    else:
-        missing = tuple(s for s in symbols if s not in out)
-        if missing:
-            out.update(fetch_yahoo_quotes(missing))
+    missing = tuple(s for s in symbols if s not in out)
+    if missing:
+        out.update(fetch_yahoo_quotes(missing))
 
     for sym in symbols:
         if sym in out:

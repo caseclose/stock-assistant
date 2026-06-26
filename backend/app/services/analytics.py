@@ -21,7 +21,9 @@ class AnalyticsService:
         self.market = market
 
     def analyze(self, symbol: str, interval: str, *, extended_hours: bool = True) -> dict:
-        enriched, _ = self.market.fetch_bars(symbol, interval, extended_hours=extended_hours)
+        enriched, _ = self.market.fetch_bars(
+            symbol, interval, limit=500, extended_hours=extended_hours,
+        )
         daily_df = None
         daily_sourced = False
         if interval != "1D":
@@ -86,6 +88,7 @@ class AnalyticsService:
                     "pivots": le.pivots,
                     "distance_pct": le.distance_pct,
                     "source": le.source,
+                    "proximity": le.proximity,
                     "flipped": le.flipped,
                     "bounce_rate": le.bounce_rate,
                     "volume_score": le.volume_score,

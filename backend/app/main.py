@@ -25,20 +25,28 @@ async def lifespan(app: FastAPI):
     hub: StreamHub = app.state.stream_hub
     poll_task = asyncio.create_task(hub.poll_loop())
     quote_task = asyncio.create_task(_watchlist_quote_loop(app))
-    yield
-    poll_task.cancel()
-    quote_task.cancel()
+    try:
+        yield
+    finally:
+        poll_task.cancel()
+        quote_task.cancel()
+        for task in (poll_task, quote_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        hub.shutdown()
 
 
 async def _watchlist_quote_loop(app: FastAPI) -> None:
-    """Warm watchlist quote cache every 15s (Yahoo + Alpaca fallback)."""
+    """Warm watchlist quote cache every 15s (Alpaca first, Yahoo for gaps)."""
     market = app.state.market
     watchlist = app.state.watchlist
     while True:
         try:
             symbols = watchlist.list_symbols()
             if symbols:
-                market.quotes_for_symbols(symbols)
+                await asyncio.to_thread(market.quotes_for_symbols, symbols)
         except Exception:
             log.debug("watchlist quote warm failed", exc_info=True)
         await asyncio.sleep(15)

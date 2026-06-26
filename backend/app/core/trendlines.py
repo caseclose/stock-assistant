@@ -62,7 +62,7 @@ def trendline_level_candidates(
     timestamps: pd.DatetimeIndex,
     close_now: float,
     *,
-    max_dist_pct: float = 0.12,
+    max_dist_pct: float = 0.15,
 ) -> list[dict]:
     """Project resistance/support trendlines from the last two swing pivots."""
 
