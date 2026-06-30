@@ -4,17 +4,19 @@
 
 **美股看盘参考** — 综合信号 · 交易员级支撑/压力 · 多周期 K 线 · 实时推送
 
-*US equities reference dashboard — composite signal, trader-grade S/R, candlestick chart with MAs.*
+<sub>面向个人投资研究参考 · 开源项目，欢迎交流与自用</sub>
 
-<br />
+<img src="https://img.shields.io/badge/设计_&_开发-FengWang-24292e?style=flat-square&logo=aboutdotme&logoColor=white" alt="Author" />
+[![Gmail](https://img.shields.io/badge/Gmail-fengw2002%40gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:fengw2002@gmail.com)
+[![PKU Mail](https://img.shields.io/badge/北大邮箱-fengwang%40stu.pku.edu.cn-94070A?style=flat-square&logo=minutemailer&logoColor=white)](mailto:fengwang@stu.pku.edu.cn)
+
+*US equities reference dashboard — composite signal, trader-grade S/R, candlestick chart with MAs.*
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)](backend/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](backend/)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15-black?logo=next.js&logoColor=white)](frontend/)
 [![Tests](https://img.shields.io/badge/tests-33%20passing-brightgreen)](backend/tests/)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](#)
-
-<br />
 
 ![Dashboard — watchlist, candlestick chart, analysis panel](docs/screenshots/dashboard.png)
 
