@@ -7,7 +7,7 @@
 <sub>面向个人投资研究参考 · 开源项目，欢迎交流与自用</sub>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/设计_&_开发-FengWang-24292e?style=flat-square&logo=aboutdotme&logoColor=white" alt="Author" />
+  <a href="https://github.com/caseclose"><img src="https://img.shields.io/badge/设计_&_开发-Feng%20Wang-24292e?style=flat-square&logo=github&logoColor=white" alt="Feng Wang" /></a>
   <a href="mailto:fengw2002@gmail.com"><img src="https://img.shields.io/badge/Gmail-fengw2002%40gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white" alt="Gmail" /></a>
   <a href="mailto:fengwang@stu.pku.edu.cn"><img src="https://img.shields.io/badge/%E5%8C%97%E5%A4%A7%E9%82%AE%E7%AE%B1-fengwang%40stu.pku.edu.cn-94070A?style=flat-square&logo=minutemailer&logoColor=white" alt="PKU Mail" /></a>
 </p>
