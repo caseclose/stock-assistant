@@ -117,6 +117,30 @@ npm run dev -- --hostname 0.0.0.0 --port 3000
 # → http://localhost:3000
 ```
 
+### Windows（PowerShell）
+
+与上文 macOS / Linux 流程等价，可用 `scripts/windows/` 下的脚本（需 Python 3.11–3.12、Node.js）：
+
+```powershell
+# 首次：创建 venv、安装依赖、复制 .env
+.\scripts\windows\setup.ps1
+
+# 两个终端分别启动（顺序不限，需先配置 .env 中的 Alpaca 密钥）
+.\scripts\windows\dev-backend.ps1   # → http://localhost:8000
+.\scripts\windows\dev-frontend.ps1  # → http://localhost:3000
+
+# 跑测试
+.\scripts\windows\test.ps1
+```
+
+若提示无法执行脚本，可在当前用户范围放宽一次：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+自选库默认路径：`%USERPROFILE%\.stock-assistant\watchlist.db`（与 macOS 的 `~/.stock-assistant/watchlist.db` 对应）。
+
 ## API（节选）
 
 | Method | Path | 说明 |
